@@ -4,3 +4,6 @@
 [submodule "modules/nvim/.config/nvim"]
 	path = modules/nvim/.config/nvim
 	url = https://github.com/Beinmann/nvimV2
+[submodule "modules/i3blocks_scripts/Main/Additional_Config/i3blocks_Scripts"]
+	path = modules/i3blocks_scripts/Main/Additional_Config/i3blocks_Scripts
+	url = https://github.com/Beinmann/i3blocks-contrib
