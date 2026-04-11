@@ -1,3 +1,6 @@
 [submodule "modules/scripts/Main/Scripts/RAM_Script_Python"]
 	path = modules/scripts/Main/Scripts/RAM_Script_Python
 	url = https://github.com/Beinmann/ram_script
+[submodule "modules/nvim/.config/nvim"]
+	path = modules/nvim/.config/nvim
+	url = https://github.com/Beinmann/nvimV2
