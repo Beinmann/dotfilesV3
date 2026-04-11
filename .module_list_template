@@ -1,8 +1,12 @@
+# Modules to be loaded (one per line)
+# You can write comments by having the line start with a # (line has to start with it)
 base
 nvim
 vim
 scripts
 i3blocks_scripts
 services
-sys/base
-sys/services
+
+# for modules under sys_modules (base path / instead of $HOME) you need to write sys/<module_name>
+# sys/base
+# sys/services
