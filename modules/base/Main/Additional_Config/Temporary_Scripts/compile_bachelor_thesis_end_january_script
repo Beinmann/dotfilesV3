@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# This ensures that the exit status of latexmk will get saved and not the status of tee
+# I think this is not necessary anymore since I don't really use the tee command anymore
+# set -o pipefail
+
+# Für die Bachelorarbeit
+# In xbindkeys habe ich Ctrl+F5 auf dieses Script gesetzt
+path=~/Main/Uni/SoSe2024/Bachelorarbeit/Bachelorarbeit_LaTeX/bachelorarbeit_template_ls5/
+cd $path
+
+notify-send "Starting latexmk compilation" "Source: current (Ctrl + F5) script"
+
+i3-msg workspace 11
+timeout 20 latexmk 2>&1 > out.txt
+
+if [ $? == "0" ]; then
+    notify-send "success" "latexmk"
+else
+    notify-send "fail" "latexmk"
+    printf "\n\n\n\ncommand timed out or was unsuccessful\n" >> out.txt
+fi
+

@@ -1,0 +1,249 @@
+#!/bin/sh
+
+
+# New functions (don't know if I keep them)
+
+
+. ~/Main/Additional_Config/Scripts/var_function.sh
+if [ -f ~/Main/Additional_Config/current_variables.sh ]; then
+    . ~/Main/Additional_Config/current_variables.sh
+fi
+
+mainr() {
+    cd ~/Main/ && r
+}
+
+
+# End new functions
+
+
+###################### Most useful things ######################
+
+alias lsb="lsblk -f"
+alias show_file_sizes="du -h --max-depth=1 | sort -h -r"
+alias myrsync="rsync -av --info=progress2"
+
+
+# Save the current working directory into a variable as a name so you can later cd $var_name to get back to it
+# you can achieve this same behavior with the bashmarks extension though those paths last for more than one session
+sd() {
+    eval "$1='$(pwd)'"
+}
+
+
+DID_I_FUCKING_STUTTER() {
+    local last_command
+    last_command=$(fc -ln -1)
+    sudo bash -c "$last_command"
+}
+
+
+myMount() {
+    sudo mount "$1" /mnt/usb/
+    cd /mnt/usb/
+}
+
+myUmount() {
+    sudo umount /mnt/usb/
+    sync
+}
+
+myCryptMount() {
+    sudo cryptsetup open "$1" myusb
+    sudo mount /dev/mapper/myusb /mnt/usb/
+    cd /mnt/usb/
+}
+
+myCryptUmount() {
+    sudo umount /mnt/usb/
+    sudo cryptsetup close myusb
+    sync
+}
+
+
+# Shutdown function (with help from ChatGPT)
+# Shuts down the pc and you can specify the amount of seconds it waits before it shuts down with argument 1
+# If no argument is given it will default to some amount of seconds (currently 6)
+# You can press Ctrl C to cancel or close the terminal in which this script is executed (unless the process persists like in tmux)
+myShutdown() {
+    secs=${1:-30}
+    while [ $secs -gt 0 ]; do
+        echo -ne "$secs Seconds till shut down (type 'now' to skip waiting)\033[0K\r"
+	sleep 1
+        if read -t 1 -n 3 input; then
+            # Check if the input is 'now'
+            if [[ $input == "now" ]]; then
+                echo -ne "\nShutting down now!\n"
+                systemctl poweroff
+            fi
+        fi
+	: $((secs--))
+    done
+    systemctl poweroff
+}
+
+myReboot() {
+    secs=${1:-30}
+    while [ $secs -gt 0 ]; do
+        echo -ne "$secs Seconds till reboot (type 'now' to skip waiting)\033[0K\r"
+	sleep 1
+        if read -t 1 -n 3 input; then
+            # Check if the input is 'now'
+            if [[ $input == "now" ]]; then
+                echo -ne "\nRebooting now!\n"
+                systemctl reboot
+            fi
+        fi
+	: $((secs--))
+    done
+    systemctl reboot
+}
+
+myHibernate() {
+    # sudo echo ""
+    mem_str="$(free -h | sed -n '2 p' | awk '{print $7}')"
+    mem=${mem_str%Gi} # split the Gi from the number of free gigs
+    # TODO right now disabling this check by just setting mem manually to 16
+    mem=16
+
+    if [ "$(echo "$mem >= 8" | bc -l)" -eq 1 ]; then
+        # echo 0 | sudo tee /sys/power/image_size
+        systemctl hibernate
+    else
+        echo "Warning: less than 8 Gigs of RAM available, hibernation could fail" && free -h && return 1
+    fi
+}
+
+
+
+
+
+
+# TODO: move this to a better spot
+prettyDf() { # Call df for viewing remaining and total space on harddisk but present it in an easily viewable way
+    echo "Remaining Space on disk (might not be 100% accurate)"
+    echo ""
+    df -h --total | head -n 1
+    df -h --total | tail -n 1
+}
+
+###########   Useful aliases and shortcuts   ###########
+alias ..='cd ..'
+alias cds='cds() { cd "$1" && ls; }; cds'
+alias restartxbindkeys="killall xbindkeys; xbindkeys"
+alias reloadbashrc="source ~/.bashrc"
+alias reloadbash="source ~/.bashrc"
+alias :r=reloadbash
+alias :q="exit"
+alias editbashrc="nvim ~/.bashrc"
+alias r="ranger_cd"
+alias lock="$HOME/Main/Scripts/Helper_Scripts/lock_screen.sh"
+alias notify="~/Main/Additional_Config/Scripts/timed_notification.sh"
+alias myTimer="~/Main/Additional_Config/Scripts/timed_notification.sh"
+alias myNotify="~/Main/Additional_Config/Scripts/timed_notification.sh"
+alias myTimerLog="echo 'Last 20 lines of notification log' && echo '' && cat ~/.notification_log | tail -n 20"
+alias myOpen="open . & disown"
+alias mySetBackground="$HOME/Main/Scripts/Helper_Scripts/set_background.sh"
+alias ram="python3 $HOME/Main/Scripts/RAM_Script_Python/main.py"
+alias myNautilusAndExit="nautilus . & exit"
+alias brown_noise="ffplay -nodisp $HOME/Main/Brown_Noise.mp3"
+alias mainVenvActivate=". ~/Main/Programming/Python/main_venv_3_10_14/bin/activate"
+alias darkMode="gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'"
+alias lightMode="gsettings set org.gnome.desktop.interface color-scheme 'default'"
+
+cw () {
+    cd $1
+    ls
+}
+
+myHibernateDropCachesIfTooLittleRAM() {
+    sudo echo ""
+    if ! myHibernate; then
+        myDropCaches
+        sleep 1
+        myHibernate
+    fi
+}
+
+
+# Testing this function
+myDropCaches() {
+    sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
+}
+
+
+myVeracryptMount() {
+    if [ "$#" -ne 2 ]; then
+        echo "$0 - 2 arguments required, container and mount point"
+        return 1
+    fi
+    sudo veracrypt --text --pim=0 --keyfiles="" --protect-hidden=no --mount "$1" "$2" && cd "$2"
+}
+
+myVeracryptDismount() {
+    sudo veracrypt --dismount
+}
+alias myVeracryptUmount=myVeracryptDismount
+
+myVeracryptCreate() {
+    if [ "$#" -ne 1 ]; then
+        echo "$0 - 1 argument required, container name"
+        return 1
+    fi
+    sudo veracrypt --text --create "$1"
+}
+
+
+mkcdir () {
+    if [ "$#" -ne 1 ]; then
+        echo "mkcdir - Error: 1 argument required, directory name"
+        return 1
+    fi
+    mkdir -p -- "$1" &&
+    builtin cd -P -- "$1"
+}
+
+prefix() {
+    mv -i "$1" "$2$1"
+}
+
+########################################################
+
+
+
+
+################## Cut copy and paste functions ########
+
+# used for quickly cutting, copying and pasting files
+# use cut or copy command to mark a file then go to
+# a different dir and use the paste command to move or
+# copy the input there
+# Currently (07.07.2024) using the commands
+# myCut   / mycut   / c
+# myCopy  / mycopy  / y
+# myPaste / mypaste / p
+# source ~/Main/Scripts/CutCopyPaste/cutcopypaste_aliases.sh
+
+########################################################
+
+
+##### Mark directory and then move there functions #####
+
+# TODO implement this again. I did have this but then I
+#      deleted the script by accident
+# Sort of the reverse of my custom cut copy and paste
+# commands
+# because with the cut copy and paste commands you first
+# select a file to be cut or copied and then call the
+# paste function in the target directory
+#
+# with the functions defined in here you mark a directory
+# as the target directory then you can call functions to
+# move or copy files and directories to that place
+# source ~/.myTargetDirThenMoveFilesThere.sh
+
+########################################################
+
+
+
+

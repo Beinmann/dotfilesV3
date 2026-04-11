@@ -1,0 +1,10 @@
+[Desktop Entry]
+Encoding=UTF-8
+Version=1.0
+Type=Application
+Terminal=false
+Exec=sh -c '/bin/bash $HOME/Main/Scripts/Startup_Script/startup_script.sh'
+Name=Startup Script
+Comment=Starts some defaults programs
+Icon=utility-terminal
+Categories=Utility;

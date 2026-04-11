@@ -1,0 +1,82 @@
+! ! XTerm settings (Provided by ChatGPT from asking it to provide me with some standard settings)
+! 
+! ! Define your color scheme
+! *background: #000000
+*background: rgba:0000/0000/0000/d900
+*foreground: #FFFFFF
+! *color0: #000000
+! *color1: #FF0000
+! *color2: #00FF00
+! *color3: #FFFF00
+! *color4: #0000FF
+! *color5: #FF00FF
+! *color6: #00FFFF
+! *color7: #D0D0D0
+! *color8: #808080
+! *color9: #FF0000
+! *color10: #00FF00
+! *color11: #FFFF00
+! *color12: #0000FF
+! *color13: #FF00FF
+! *color14: #00FFFF
+! *color15: #FFFFFF
+
+! Font settings (change the font name and size as needed)
+*font: xft:DejaVu Sans Mono:size=12
+
+! Set the number of lines and columns
+*VT100*geometry: 80x24
+
+! Enable UTF-8 encoding
+*utf8: 1
+
+! Enable line and box drawing characters
+*allowSendEvents: True
+*metaSendsEscape: True
+*eightBitInput: False
+
+! Enable scrollbar (optional)
+! *scrollBar: True
+
+! Enable blinking cursor (optional)
+*cursorBlink: True
+
+! Enable visual bell (optional)
+! *visualBell: True
+
+! Enable focus follows mouse (optional)
+! *focusFollowsMouse: True
+
+! Control the behavior of the delete key
+*deleteIsDEL: True
+
+! Save lines to the scrollback buffer (adjust the number as needed)
+*saveLines: 10000
+
+! Bind a key combination to paste from the clipboard
+*VT100*translations: #override \
+    Shift <KeyPress> Insert: insert-selection(CLIPBOARD) \n\
+    Shift <KeyPress> Delete: delete-selection()
+
+! Enable clipboard integration (requires xclip or xsel)
+*selectToClipboard: true
+
+! Paste with Ctrl + Shift + V
+XTerm*VT100*translations: #override \n\
+    Ctrl Shift <KeyPress> V: insert-selection(CLIPBOARD)
+
+! Adjust the cursor and pointer shapes (optional)
+*pointerShape: left_ptr
+*cursorColor: #FFFFFF
+
+! Set the title of the xterm window
+*title: Custom XTerm
+
+! Enable focus follows mouse (optional)
+! *focusFollowsMouse: true
+
+! Turn off reverse video (optional)
+*reverseVideo: false
+
+! Add more custom settings as needed
+

@@ -1,0 +1,3 @@
+# Enable natural scrolling and Tapping for my touchpad
+exec --no-startup-id xinput set-prop "ELAN0529:00 04F3:3265 Touchpad" "libinput Natural Scrolling Enabled" 1
+exec --no-startup-id xinput set-prop "ELAN0529:00 04F3:3265 Touchpad" "libinput Tapping Enabled" 1

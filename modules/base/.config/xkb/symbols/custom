@@ -1,0 +1,23 @@
+default  partial alphanumeric_keys
+xkb_symbols "basiccustom" {
+    include "de(basic)"
+    include "inet(evdev)" 
+
+    name[Group1] = "German (Custom Minimal)";
+
+    replace key <CAPS> { [ Control_L ] };
+    modifier_map Control { <CAPS> };
+
+    replace key <AD11>	{ [ BackSpace, BackSpace ] };
+    replace key <AC10>	{ [ Return, Return ] };
+    replace key <AC11>	{ [ Tab, ISO_Left_Tab ] };
+
+    replace key <AE01>	{[ 1, exclam, adiaeresis, Adiaeresis ]};
+    replace key <AE02>	{[ 2, quotedbl , odiaeresis, Odiaeresis ]};
+    replace key <AE03>	{[ 3, section, udiaeresis, Udiaeresis ]};
+
+    replace key <AC06> {[ h, H, Left, Left]};
+    replace key <AC07> {[ j, J, Down, Down ]};
+    replace key <AC08> {[ k, K, Up, Up ]};
+    replace key <AC09> {[ l, L, Right, Right ]};
+};

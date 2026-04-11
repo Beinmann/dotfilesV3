@@ -1,0 +1,13 @@
+# This is Git's per-user configuration file.
+[user]
+# Please adapt and uncomment the following lines:
+	name = Beinmann
+	email = Beinmann@proton.me
+
+[credential]
+	# helper = /usr/share/doc/git/contrib/credential/libsecret/git-credential-libsecret
+	# timeout = 10
+[init]
+	defaultBranch = main
+[alias]
+	mylog = log --oneline -n 5

@@ -1,0 +1,11 @@
+include ~/.config/i3/config
+
+# one line is Caps -> Ctrl
+input * {
+    xkb_layout custom
+    repeat_rate 67
+    repeat_delay 333
+}
+
+# Disable Caps Lock toggling
+bindsym Caps_Lock nop
