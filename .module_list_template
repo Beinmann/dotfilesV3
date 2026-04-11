@@ -1,0 +1,8 @@
+base
+nvim
+vim
+scripts
+i3blocks_scripts
+services
+sys/base
+sys/services
