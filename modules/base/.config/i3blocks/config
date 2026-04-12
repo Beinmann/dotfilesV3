@@ -1,0 +1,74 @@
+# i3blocks config
+#
+# Each block command defaults to $SCRIPT_DIR/$BLOCK_NAME/$BLOCK_NAME.
+# SCRIPT_DIR is set by the bar command in the i3 config:
+#   status_command SCRIPT_DIR=~/Main/Additional_Config/i3blocks_Scripts i3blocks -c ~/.config/i3blocks/config
+
+command=$SCRIPT_DIR/$BLOCK_NAME/$BLOCK_NAME
+separator_block_width=15
+markup=none
+
+
+# --- System resources ---
+
+[cpu_usage]
+label=CPU
+color=#FE8019
+min_width=CPU 100.00%
+interval=10
+separator=false
+separator_block_width=5
+
+[memory]
+label=MEM
+color=#83A598
+min_width=MEM 100%
+interval=30
+
+
+# --- Audio ---
+
+[volume]
+label=VOL
+color=#B8BB26
+interval=once
+signal=10
+
+
+# --- Power (hidden gracefully when no battery present) ---
+
+[battery]
+label=BAT
+color=#FABD2F
+interval=30
+
+
+# --- Network (uncomment if needed) ---
+
+# [iface]
+# color=#8EC07C
+# interval=10
+# separator=false
+# separator_block_width=5
+
+# [wifi]
+# label=WiFi
+# color=#8EC07C
+# interval=10
+
+
+# --- Clock ---
+
+[time]
+label=
+command=date '+%d.%m.%Y'
+color=#A89984
+interval=60
+separator=false
+separator_block_width=8
+
+[time]
+label=
+command=date '+%H:%M:%S'
+color=#EBDBB2
+interval=1

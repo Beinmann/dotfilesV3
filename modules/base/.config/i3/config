@@ -246,7 +246,7 @@ bindsym $mod+r mode "resize"
 # finds out, if available)
 bar {
         position top
-        status_command SCRIPT_DIR=~/Main/Additional_Config/i3blocks_Scripts i3blocks
+        status_command SCRIPT_DIR=~/Main/Additional_Config/i3blocks_Scripts i3blocks -c ~/.config/i3blocks/config
 }
 
 
