@@ -9,27 +9,17 @@ separator_block_width=15
 markup=none
 
 
-# --- System resources ---
+# --- System info (click to show notification) ---
 
-[cpu_usage]
-label=CPU
-color=#FE8019
-min_width=CPU 100.00%
-interval=10
-separator=false
-separator_block_width=5
-
-[memory]
-label=MEM
-color=#83A598
-min_width=MEM 100%
-interval=30
+[sysinfo]
+color=#928374
+interval=once
 
 
 # --- Audio ---
 
 [volume]
-label=VOL
+label=Volume
 color=#B8BB26
 interval=once
 signal=10
@@ -37,9 +27,8 @@ signal=10
 
 # --- Power (hidden gracefully when no battery present) ---
 
-[battery]
-label=BAT
-color=#FABD2F
+[battery2]
+markup=pango
 interval=30
 
 
@@ -61,14 +50,6 @@ interval=30
 
 [time]
 label=
-command=date '+%d.%m.%Y'
-color=#A89984
-interval=60
-separator=false
-separator_block_width=8
-
-[time]
-label=
-command=date '+%H:%M:%S'
+command=date '+%H:%M'
 color=#EBDBB2
-interval=1
+interval=60

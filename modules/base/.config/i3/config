@@ -256,6 +256,7 @@ bar {
 
 
 
+
 # Here are the commands that I added. I might move them in the future because some commands like starting the status bar might need to be at the bottom, who knows
 
 # Disable blue box around currently selected window (I am testing this out for now)
