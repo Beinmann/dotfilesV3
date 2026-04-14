@@ -5,9 +5,13 @@
 	email = Beinmann@proton.me
 
 [credential]
+	helper = cache --timeout 21600
+	helper = oauth
 	# helper = /usr/share/doc/git/contrib/credential/libsecret/git-credential-libsecret
 	# timeout = 10
 [init]
 	defaultBranch = main
 [alias]
 	mylog = log --oneline -n 5
+[credential "https://github.com"]
+	username = Beinmann
