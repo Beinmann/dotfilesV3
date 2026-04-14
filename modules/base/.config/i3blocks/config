@@ -16,6 +16,15 @@ color=#928374
 interval=once
 
 
+# --- Clock ---
+
+[time]
+label=
+command=date '+%H:%M'
+color=#EBDBB2
+interval=60
+
+
 # --- Audio ---
 
 [volume]
@@ -44,12 +53,3 @@ interval=30
 # label=WiFi
 # color=#8EC07C
 # interval=10
-
-
-# --- Clock ---
-
-[time]
-label=
-command=date '+%H:%M'
-color=#EBDBB2
-interval=60
