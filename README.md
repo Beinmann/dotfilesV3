@@ -77,24 +77,26 @@ python3 init_or_deinit_stow.py -R   # restow (unstow then stow again, useful aft
 Shell aliases, functions, and plugin/tool integrations that are module-specific live under:
 
 ```
-~/.config/bash_dotfiles/
+~/.config/dotfiles/
   aliases.d/      # one .sh file per module
   functions.d/    # one .sh file per module
   plugins.d/      # one .sh file per module
   settings.d/     # one .sh file per module
+  system_local/   # machine-specific overrides (not tracked in git)
 ```
 
 These directories are glob-sourced by `.bashrc` at shell startup. If a module isn't stowed, its file doesn't exist and nothing is loaded — no conditionals needed.
 
 ### Machine-specific config
 
-For tooling that is local to a single machine and should not be tracked in git (e.g. nvm, conda, company-specific paths), create:
+For tooling that is local to a single machine and should not be tracked in git (e.g. nvm, conda, company-specific paths), the init script automatically creates these files on first run if they don't exist:
 
 ```
-~/.config/system_specific_config/bashrc.sh
+~/.config/dotfiles/system_local/bashrc.sh      # sourced by .bashrc at startup
+~/.config/dotfiles/system_local/i3_config_addon # included by i3 config at startup
 ```
 
-This file is sourced by `.bashrc` at startup if it exists. It is never part of this repo — create it manually on each machine that needs it.
+These files are never part of this repo and are never deleted by `-D`/`-R` — add machine-specific config to them freely.
 
 ---
 

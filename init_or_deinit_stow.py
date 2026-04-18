@@ -28,9 +28,24 @@ def parse_args():
 
     return parser.parse_args()
 
+PERSISTENT_FILES = [
+    ("~/.config/dotfiles/system_local", "bashrc.sh"),
+    ("~/.config/dotfiles/system_local", "i3_config_addon"),
+]
+
+
 class StowHelper:
     def __init__(self):
         self.args = parse_args()
+
+    def ensure_persistent_files(self):
+        for dir_path, filename in PERSISTENT_FILES:
+            expanded = os.path.expanduser(dir_path)
+            os.makedirs(expanded, exist_ok=True)
+            filepath = os.path.join(expanded, filename)
+            if not os.path.exists(filepath):
+                open(filepath, "a").close()
+                print(f"Created persistent file: {filepath}")
 
     def run_stow(self, target, directory, modules, deinit=False, sudo=False):
         if not modules:
@@ -58,6 +73,8 @@ class StowHelper:
             self.run_stow("/", SYS_MODULES_DIR, sys_modules, deinit=deinit, sudo=True)
 
     def main(self):
+        self.ensure_persistent_files()
+
         if not os.path.isfile(MODULE_LIST_FILE):
             print("file module_list does not exist. Cannot initialize stow")
             print("Did you perhaps forget to rename it?")

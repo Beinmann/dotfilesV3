@@ -11,13 +11,13 @@ esac
 
 
 ####################### Imports
-for f in ~/.config/bash_dotfiles/settings.d/*.sh; do [ -f "$f" ] && . "$f"; done
-for f in ~/.config/bash_dotfiles/aliases.d/*.sh; do [ -f "$f" ] && . "$f"; done
-for f in ~/.config/bash_dotfiles/functions.d/*.sh; do [ -f "$f" ] && . "$f"; done
-for f in ~/.config/bash_dotfiles/plugins.d/*.sh; do [ -f "$f" ] && . "$f"; done
+for f in ~/.config/dotfiles/settings.d/*.sh; do [ -f "$f" ] && . "$f"; done
+for f in ~/.config/dotfiles/aliases.d/*.sh; do [ -f "$f" ] && . "$f"; done
+for f in ~/.config/dotfiles/functions.d/*.sh; do [ -f "$f" ] && . "$f"; done
+for f in ~/.config/dotfiles/plugins.d/*.sh; do [ -f "$f" ] && . "$f"; done
 
-if [ -f ~/.config/system_specific_config/bashrc.sh ]; then
-    . ~/.config/system_specific_config/bashrc.sh
+if [ -f ~/.config/dotfiles/system_local/bashrc.sh ]; then
+    . ~/.config/dotfiles/system_local/bashrc.sh
 fi
 
 
