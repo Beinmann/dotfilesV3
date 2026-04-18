@@ -10,6 +10,7 @@
 # Please see https://i3wm.org/docs/userguide.html for a complete reference!
 
 set $mod Mod4
+set $scripts $HOME/.config/i3/scripts
 bindsym $mod+q kill
 
 exec --no-startup-id xinput set-prop "ELAN0529:00 04F3:3265 Touchpad" "libinput Natural Scrolling Enabled" 1
@@ -163,40 +164,40 @@ set $ws5a "55"
 exec --no-startup-id i3-msg 'workspace number 10'
 
 # switch to workspace
-bindsym $mod+1 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 10
-bindsym $mod+2 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 20
-bindsym $mod+3 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 30
-bindsym $mod+4 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 40
-bindsym $mod+5 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 50
-bindsym $mod+6 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 60
-bindsym $mod+7 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 70
-bindsym $mod+8 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 80
-bindsym $mod+9 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 90
-bindsym $mod+0 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 100
+bindsym $mod+1 exec --no-startup-id $scripts/i3_switch_workspace.sh 10
+bindsym $mod+2 exec --no-startup-id $scripts/i3_switch_workspace.sh 20
+bindsym $mod+3 exec --no-startup-id $scripts/i3_switch_workspace.sh 30
+bindsym $mod+4 exec --no-startup-id $scripts/i3_switch_workspace.sh 40
+bindsym $mod+5 exec --no-startup-id $scripts/i3_switch_workspace.sh 50
+bindsym $mod+6 exec --no-startup-id $scripts/i3_switch_workspace.sh 60
+bindsym $mod+7 exec --no-startup-id $scripts/i3_switch_workspace.sh 70
+bindsym $mod+8 exec --no-startup-id $scripts/i3_switch_workspace.sh 80
+bindsym $mod+9 exec --no-startup-id $scripts/i3_switch_workspace.sh 90
+bindsym $mod+0 exec --no-startup-id $scripts/i3_switch_workspace.sh 100
 
-bindsym $mod+Shift+1 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 11
-bindsym $mod+Shift+2 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 22
-bindsym $mod+Shift+3 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 33
-bindsym $mod+Shift+4 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 44
-bindsym $mod+Shift+5 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 55
-bindsym $mod+Shift+6 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 66
-bindsym $mod+Shift+7 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 77
-bindsym $mod+Shift+8 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 88
-bindsym $mod+Shift+9 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 99
+bindsym $mod+Shift+1 exec --no-startup-id $scripts/i3_switch_workspace.sh 11
+bindsym $mod+Shift+2 exec --no-startup-id $scripts/i3_switch_workspace.sh 22
+bindsym $mod+Shift+3 exec --no-startup-id $scripts/i3_switch_workspace.sh 33
+bindsym $mod+Shift+4 exec --no-startup-id $scripts/i3_switch_workspace.sh 44
+bindsym $mod+Shift+5 exec --no-startup-id $scripts/i3_switch_workspace.sh 55
+bindsym $mod+Shift+6 exec --no-startup-id $scripts/i3_switch_workspace.sh 66
+bindsym $mod+Shift+7 exec --no-startup-id $scripts/i3_switch_workspace.sh 77
+bindsym $mod+Shift+8 exec --no-startup-id $scripts/i3_switch_workspace.sh 88
+bindsym $mod+Shift+9 exec --no-startup-id $scripts/i3_switch_workspace.sh 99
 # does not work yet with current system
-# bindsym $mod+Shift+0 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh 100
+# bindsym $mod+Shift+0 exec --no-startup-id $scripts/i3_switch_workspace.sh 100
 
 # move focused container to workspace
-bindsym $mod+Ctrl+1 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_move_to_workspace.sh 1
-bindsym $mod+Ctrl+2 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_move_to_workspace.sh 2
-bindsym $mod+Ctrl+3 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_move_to_workspace.sh 3
-bindsym $mod+Ctrl+4 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_move_to_workspace.sh 4
-bindsym $mod+Ctrl+5 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_move_to_workspace.sh 5
-bindsym $mod+Ctrl+6 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_move_to_workspace.sh 6
-bindsym $mod+Ctrl+7 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_move_to_workspace.sh 7
-bindsym $mod+Ctrl+8 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_move_to_workspace.sh 8
-bindsym $mod+Ctrl+9 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_move_to_workspace.sh 9
-bindsym $mod+Ctrl+0 exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_move_to_workspace.sh 10
+bindsym $mod+Ctrl+1 exec --no-startup-id $scripts/i3_move_to_workspace.sh 1
+bindsym $mod+Ctrl+2 exec --no-startup-id $scripts/i3_move_to_workspace.sh 2
+bindsym $mod+Ctrl+3 exec --no-startup-id $scripts/i3_move_to_workspace.sh 3
+bindsym $mod+Ctrl+4 exec --no-startup-id $scripts/i3_move_to_workspace.sh 4
+bindsym $mod+Ctrl+5 exec --no-startup-id $scripts/i3_move_to_workspace.sh 5
+bindsym $mod+Ctrl+6 exec --no-startup-id $scripts/i3_move_to_workspace.sh 6
+bindsym $mod+Ctrl+7 exec --no-startup-id $scripts/i3_move_to_workspace.sh 7
+bindsym $mod+Ctrl+8 exec --no-startup-id $scripts/i3_move_to_workspace.sh 8
+bindsym $mod+Ctrl+9 exec --no-startup-id $scripts/i3_move_to_workspace.sh 9
+bindsym $mod+Ctrl+0 exec --no-startup-id $scripts/i3_move_to_workspace.sh 10
 bindsym $mod+Ctrl+Shift+1 move container to workspace $ws1a
 bindsym $mod+Ctrl+Shift+2 move container to workspace $ws2a
 bindsym $mod+Ctrl+Shift+3 move container to workspace $ws3a
@@ -204,11 +205,11 @@ bindsym $mod+Ctrl+Shift+4 move container to workspace $ws4a
 bindsym $mod+Ctrl+Shift+5 move container to workspace $ws5a
 
 # Swap workspaces around (main and secondary)
-bindsym $mod+y exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_swap_current_workspace_order.sh
+bindsym $mod+y exec --no-startup-id $scripts/i3_swap_current_workspace_order.sh
 
 # Go to previous workspace
-bindsym $mod+Tab exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_goto_prev_workspace.sh
-bindsym Mod1+Tab exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_goto_prev_workspace.sh
+bindsym $mod+Tab exec --no-startup-id $scripts/i3_goto_prev_workspace.sh
+bindsym Mod1+Tab exec --no-startup-id $scripts/i3_goto_prev_workspace.sh
 
 # reload the configuration file
 bindsym $mod+Shift+c reload
@@ -276,7 +277,7 @@ exec --no-startup-id ssh-add ~.ssh/id_rsa_laptop
 exec --no-startup-id picom -b
 
 # Flash border on switch window
-# exec --no-startup-id $HOME/Main/Additional_Config/Scripts/i3_flash_border_on_switch.sh
+# exec --no-startup-id $scripts/i3_flash_border_on_switch.sh
 
 # Screenshot current window PrintScreen
 bindsym Print exec flameshot gui

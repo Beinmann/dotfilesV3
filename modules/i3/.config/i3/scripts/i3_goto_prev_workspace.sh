@@ -13,7 +13,7 @@ if [[ -z "$prev_workspace" ]]; then
   exit 1
 fi
 
-script="$HOME/Main/Additional_Config/Scripts/i3_switch_workspace.sh"
+script="$HOME/.config/i3/scripts/i3_switch_workspace.sh"
 if [[ ! -x "$script" ]]; then
   notify-send "Error:" "$script not found or not executable." >&2
   exit 1
