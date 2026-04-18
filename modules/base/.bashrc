@@ -29,14 +29,12 @@ fi
 if [ -f ~/Main/Additional_Config/functions_and_aliases.sh ]; then
     . ~/Main/Additional_Config/functions_and_aliases.sh
 fi
-if [ -f ~/Main/Additional_Config/plugins.sh ]; then
-    . ~/Main/Additional_Config/plugins.sh
-fi
 if [ -f ~/Main/Additional_Config/system_specific_bashrc_config.sh ]; then
     . ~/Main/Additional_Config/system_specific_bashrc_config.sh
 fi
 for f in ~/.config/bash_dotfiles/aliases.d/*.sh; do [ -f "$f" ] && . "$f"; done
 for f in ~/.config/bash_dotfiles/functions.d/*.sh; do [ -f "$f" ] && . "$f"; done
+for f in ~/.config/bash_dotfiles/plugins.d/*.sh; do [ -f "$f" ] && . "$f"; done
 
 
 
