@@ -4,6 +4,17 @@
 ###################### Most useful things ######################
 
 
+# Fuzzy-pick a bashmark (from ~/.sdirs) and open nvim there
+proj() {
+  local dir
+  dir=$(grep '^export DIR_' ~/.sdirs \
+    | sed 's/export DIR_\([^=]*\)="\(.*\)"/\1\t\2/' \
+    | fzf --with-nth=1 \
+    | cut -f2)
+  [ -n "$dir" ] && cd "$dir" && nvim
+}
+
+
 # Save the current working directory into a variable as a name so you can later cd $var_name to get back to it
 # you can achieve this same behavior with the bashmarks extension though those paths last for more than one session
 sd() {
