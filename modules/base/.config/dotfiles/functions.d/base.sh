@@ -31,6 +31,14 @@ proj() {
   [ -n "$dir" ] && cd "$(eval echo "$dir")" && nvim
 }
 
+_proj_complete() {
+  local cur="${COMP_WORDS[COMP_CWORD]}"
+  local bookmarks
+  bookmarks=$(grep '^export DIR_' ~/.sdirs | sed 's/export DIR_\([^=]*\)=.*/\1/')
+  COMPREPLY=($(compgen -W "$bookmarks" -- "$cur"))
+}
+complete -F _proj_complete proj
+
 
 # Save the current working directory into a variable as a name so you can later cd $var_name to get back to it
 # you can achieve this same behavior with the bashmarks extension though those paths last for more than one session
