@@ -28,7 +28,7 @@ interval=60
 # --- Audio ---
 
 [volume-pulseaudio]
-command=$SCRIPT_DIR/$BLOCK_NAME/$BLOCK_NAME -F '${SYMB} ${VOL}%' -S
+command=$HOME/.config/i3/scripts/volume_status.sh
 markup=pango
 interval=persist
 color=#B8BB26
