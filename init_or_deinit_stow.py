@@ -14,27 +14,30 @@ def parse_args():
         description="Script for initializing or deinitializing stow dotfiles"
     )
 
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "-D", "--deinit",
         action="store_true",
-        help="Instead of stowing the dotfiles it will unstow them (remove all links)"
+        help="Unstow the dotfiles (remove all links)"
+    )
+    group.add_argument(
+        "-R", "--restow",
+        action="store_true",
+        help="Unstow everything then stow again (useful after moving files)"
     )
 
-    args = parser.parse_args()
-
-    return args
+    return parser.parse_args()
 
 class StowHelper:
     def __init__(self):
         self.args = parse_args()
 
-    def run_stow(self, target, directory, modules, sudo=False):
-        """Run stow for the given target and module directory."""
+    def run_stow(self, target, directory, modules, deinit=False, sudo=False):
         if not modules:
             print(f"No modules to stow in {directory}")
             return
         cmd = ["stow", "-t", target, "-d", directory] + modules
-        if self.args.deinit:
+        if deinit:
             cmd.insert(1, "-D")
         if sudo:
             cmd.insert(0, "sudo")
@@ -46,6 +49,13 @@ class StowHelper:
             print(f"Error running stow: {e}")
             sys.exit(1)
 
+    def stow_all(self, home_modules, sys_modules, deinit=False):
+        if home_modules:
+            self.run_stow(os.environ["HOME"], MODULES_DIR, home_modules, deinit=deinit)
+        if sys_modules:
+            print("----------------------------------")
+            print("System level modules detected in the module list")
+            self.run_stow("/", SYS_MODULES_DIR, sys_modules, deinit=deinit, sudo=True)
 
     def main(self):
         if not os.path.isfile(MODULE_LIST_FILE):
@@ -63,15 +73,13 @@ class StowHelper:
         home_modules = [m for m in modules if not m.startswith("sys/")]
         sys_modules = [m.removeprefix("sys/") for m in modules if m.startswith("sys/")]
 
-        # Stow home modules
-        if home_modules:
-            self.run_stow(os.environ["HOME"], MODULES_DIR, home_modules)
-
-        # Stow system modules (requires sudo)
-        if sys_modules:
-            print("----------------------------------")
-            print("System level modules detected in the module list")
-            self.run_stow("/", SYS_MODULES_DIR, sys_modules, sudo=True)
+        if self.args.restow:
+            print("--- Unstowing ---")
+            self.stow_all(home_modules, sys_modules, deinit=True)
+            print("--- Stowing ---")
+            self.stow_all(home_modules, sys_modules, deinit=False)
+        else:
+            self.stow_all(home_modules, sys_modules, deinit=self.args.deinit)
 
 if __name__ == "__main__":
     StowHelper().main()
