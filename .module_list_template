@@ -4,7 +4,7 @@ base
 nvim
 vim
 scripts
-i3blocks_scripts
+i3
 services
 
 # for modules under sys_modules (base path / instead of $HOME) you need to write sys/<module_name>
