@@ -2,10 +2,6 @@
 
 Personal dotfiles managed with [GNU Stow](https://www.gnu.org/software/stow/). Each tool or concern lives in its own module — only the modules you activate get symlinked into your home directory.
 
-> **Note:** This README was written with AI assistance and may not reflect the latest state of the repo at all times. It is intended as a temporary overview until a proper one is written.
-
----
-
 ## What is this?
 
 A modular dotfiles setup for a Linux desktop running i3. The core idea is that every piece of configuration belongs to a specific module. Activating a module symlinks its files into `$HOME` using stow; deactivating removes them. This makes it easy to maintain different configurations across machines (e.g. with or without laptop-specific tweaks, with or without AI tooling).
@@ -16,11 +12,19 @@ A modular dotfiles setup for a Linux desktop running i3. The core idea is that e
 
 ### Prerequisites
 
-Install required packages:
+Install required packages (i3, stow, neovim, tilix, rofi, i3blocks, picom, and others):
 
 ```bash
 bash Scripts/Initialization_and_Saving_State_Scripts/apt_install_programs.sh
 ```
+
+### Initialize submodules
+
+```bash
+git submodule update --init --recursive
+```
+
+This pulls in the nvim config, RAM monitor script, and i3blocks-contrib scripts.
 
 ### Resolve conflicts first
 
@@ -57,8 +61,6 @@ python3 init_or_deinit_stow.py -R   # restow (unstow then stow again, useful aft
 
 ## Modules
 
-The following modules are currently in the repo. More may be added over time.
-
 | Module | Description |
 |---|---|
 | `base` | Core shell setup: `.bashrc`, shell settings, aliases, functions, plugins. The foundation — should always be active. |
@@ -67,8 +69,8 @@ The following modules are currently in the repo. More may be added over time.
 | `vim` | Vim configuration for when neovim isn't available. |
 | `scripts` | Miscellaneous helper scripts (RAM monitor etc.) managed as submodules. |
 | `services` | Systemd user services. |
-| `ai` | AI tooling — currently includes a Claude usage monitor script and shell alias. Only activate on machines where you use Claude. |
-| `laptop_adaptations` | Laptop-specific tweaks (touchpad natural scrolling, tapping). Activate instead of or alongside `base` on laptops. |
+| `ai` | AI tooling — Claude usage monitor script and shell alias. Opt-in: only activate on machines where you use Claude. |
+| `laptop_adaptations` | Laptop-specific tweaks (touchpad natural scrolling, tapping). Opt-in: activate on laptops instead of or alongside `base`. |
 
 ### Module conventions
 
@@ -91,9 +93,11 @@ These directories are glob-sourced by `.bashrc` at shell startup. If a module is
 ```
 dotfilesV3/
 ├── modules/               # one directory per module, stowed to $HOME
-├── sys_modules/           # modules stowed to / (requires sudo)
+├── sys_modules/           # modules stowed to / (requires sudo stow)
 ├── Scripts/               # repo-level utility scripts (not stowed)
 ├── init_or_deinit_stow.py # stow helper
 ├── .module_list_template  # template for per-machine module selection
 └── .module_list           # your active modules (gitignored)
 ```
+
+`sys_modules` works the same as `modules` but targets `/` as the stow target instead of `$HOME`. Use it for system-wide config files (e.g. under `/etc`). Activate these by prefixing the module name with `sys/` in `.module_list`, e.g. `sys/base`.
