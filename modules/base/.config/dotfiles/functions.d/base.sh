@@ -6,12 +6,29 @@
 
 # Fuzzy-pick a bashmark (from ~/.sdirs) and open nvim there
 proj() {
+  if [ "$#" -ge 2 ]; then
+    echo "proj: too many arguments" >&2
+    return 1
+  fi
+
+  local entries
+  entries=$(grep '^export DIR_' ~/.sdirs \
+    | sed 's/export DIR_\([^=]*\)="\(.*\)"/\1\t\2/')
+
+  if [ "$#" -eq 1 ]; then
+    local exact
+    exact=$(echo "$entries" | awk -F'\t' -v name="$1" '$1 == name {print $2}')
+    if [ -n "$exact" ]; then
+      cd "$(eval echo "$exact")" && nvim
+      return
+    fi
+  fi
+
   local dir
-  dir=$(grep '^export DIR_' ~/.sdirs \
-    | sed 's/export DIR_\([^=]*\)="\(.*\)"/\1\t\2/' \
-    | fzf --with-nth=1 \
+  dir=$(echo "$entries" \
+    | fzf --with-nth=1 ${1:+--query="$1"} \
     | cut -f2)
-  [ -n "$dir" ] && cd "$dir" && nvim
+  [ -n "$dir" ] && cd "$(eval echo "$dir")" && nvim
 }
 
 
