@@ -1,1 +1,34 @@
-sudo apt -y install i3 git stow tilix tmux progress i3blocks feh vim-gtk3 rofi sway ranger xclip rsync gparted xinput picom gcc fonts-font-awesome imagemagick pulseaudio-utils brightnessctl network-manager-gnome libnotify-bin ffmpeg curl git-credential-oauth ripgrep make fzf
+packages=(
+  i3
+  git
+  stow
+  tilix
+  tmux
+  progress
+  i3blocks
+  feh
+  vim-gtk3
+  rofi
+  sway
+  ranger
+  xclip
+  rsync
+  gparted
+  xinput
+  picom
+  gcc
+  fonts-font-awesome
+  imagemagick
+  pulseaudio-utils
+  brightnessctl
+  network-manager-gnome
+  libnotify-bin
+  ffmpeg
+  curl
+  git-credential-oauth
+  ripgrep
+  make
+  fzf
+)
+
+sudo apt -y install "${packages[@]}"
