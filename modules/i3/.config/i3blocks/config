@@ -27,11 +27,11 @@ interval=60
 
 # --- Audio ---
 
-[volume]
-label=Volume
+[volume-pulseaudio]
+command=$SCRIPT_DIR/$BLOCK_NAME/$BLOCK_NAME -F '${SYMB} ${VOL}%' -S
+markup=pango
+interval=persist
 color=#B8BB26
-interval=once
-signal=10
 
 
 # --- Power (hidden gracefully when no battery present) ---
