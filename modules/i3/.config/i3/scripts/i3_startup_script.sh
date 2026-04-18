@@ -19,7 +19,7 @@ xbindkeys
 flatpak run org.mozilla.firefox &
 flatpak run md.obsidian.Obsidian &
 flatpak run com.bitwarden.desktop &
-nm-applet
+nm-applet &
 
 # [ -n "$DISPLAY" ]                     && tmux set-environment -g DISPLAY "$DISPLAY"
 # [ -n "$WAYLAND_DISPLAY" ]            && tmux set-environment -g WAYLAND_DISPLAY "$WAYLAND_DISPLAY"
