@@ -2,7 +2,7 @@
 #
 # Each block command defaults to $SCRIPT_DIR/$BLOCK_NAME/$BLOCK_NAME.
 # SCRIPT_DIR is set by the bar command in the i3 config:
-#   status_command SCRIPT_DIR=~/Main/Additional_Config/i3blocks_Scripts i3blocks -c ~/.config/i3blocks/config
+#   status_command SCRIPT_DIR=~/.config/i3blocks/scripts i3blocks -c ~/.config/i3blocks/config
 
 command=$SCRIPT_DIR/$BLOCK_NAME/$BLOCK_NAME
 separator_block_width=15
