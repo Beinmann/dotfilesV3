@@ -31,6 +31,8 @@ def parse_args():
 PERSISTENT_FILES = [
     ("~/.config/dotfiles/system_local", "bashrc.sh"),
     ("~/.config/dotfiles/system_local", "i3_config_addon"),
+    ("~/.config/dotfiles/system_local", "gitconfig"),
+    ("~/.config/dotfiles/system_local", "monitors.sh"),
 ]
 
 

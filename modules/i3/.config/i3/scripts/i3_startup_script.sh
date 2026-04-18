@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if [ -f "$HOME/.config/dotfiles/system_local/monitors.sh" ]; then
+    . "$HOME/.config/dotfiles/system_local/monitors.sh"
+fi
+
 autokey-gtk &
 
 source $HOME/.xinitrc

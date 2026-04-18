@@ -15,3 +15,5 @@
 	mylog = log --oneline -n 5
 [credential "https://github.com"]
 	username = Beinmann
+[include]
+	path = ~/.config/dotfiles/system_local/gitconfig
