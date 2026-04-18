@@ -86,6 +86,16 @@ Shell aliases, functions, and plugin/tool integrations that are module-specific 
 
 These directories are glob-sourced by `.bashrc` at shell startup. If a module isn't stowed, its file doesn't exist and nothing is loaded — no conditionals needed.
 
+### Machine-specific config
+
+For tooling that is local to a single machine and should not be tracked in git (e.g. nvm, conda, company-specific paths), create:
+
+```
+~/.config/system_specific_config/bashrc.sh
+```
+
+This file is sourced by `.bashrc` at startup if it exists. It is never part of this repo — create it manually on each machine that needs it.
+
 ---
 
 ## Repository structure

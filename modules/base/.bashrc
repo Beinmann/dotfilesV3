@@ -16,8 +16,8 @@ for f in ~/.config/bash_dotfiles/aliases.d/*.sh; do [ -f "$f" ] && . "$f"; done
 for f in ~/.config/bash_dotfiles/functions.d/*.sh; do [ -f "$f" ] && . "$f"; done
 for f in ~/.config/bash_dotfiles/plugins.d/*.sh; do [ -f "$f" ] && . "$f"; done
 
-if [ -f ~/Main/Additional_Config/system_specific_bashrc_config.sh ]; then
-    . ~/Main/Additional_Config/system_specific_bashrc_config.sh
+if [ -f ~/.config/system_specific_config/bashrc.sh ]; then
+    . ~/.config/system_specific_config/bashrc.sh
 fi
 
 
