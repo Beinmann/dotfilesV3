@@ -9,11 +9,13 @@ separator_block_width=15
 markup=none
 
 
-# --- System info (click to show notification) ---
+# --- System info hint (click or mod+i to show notification) ---
 
-[sysinfo]
-color=#928374
+[sysinfo-hint]
+command=$HOME/.config/i3/scripts/sysinfo_block.sh
+markup=pango
 interval=once
+color=#928374
 
 
 # --- Clock ---

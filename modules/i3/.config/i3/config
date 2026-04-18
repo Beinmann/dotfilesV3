@@ -65,6 +65,9 @@ tiling_drag modifier
 
 # start a terminal
 bindsym $mod+Return exec tilix
+
+# show system info notification
+bindsym $mod+i exec --no-startup-id $HOME/.config/i3/scripts/show_sysinfo.sh
 # i3-sensible-terminal
 
 # kill focused window
