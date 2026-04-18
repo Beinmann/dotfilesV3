@@ -1,22 +1,6 @@
 #!/bin/sh
 
 
-# New functions (don't know if I keep them)
-
-
-. ~/Main/Additional_Config/Scripts/var_function.sh
-if [ -f ~/Main/Additional_Config/current_variables.sh ]; then
-    . ~/Main/Additional_Config/current_variables.sh
-fi
-
-mainr() {
-    cd ~/Main/ && r
-}
-
-
-# End new functions
-
-
 ###################### Most useful things ######################
 
 
