@@ -36,6 +36,7 @@ if [ -f ~/Main/Additional_Config/system_specific_bashrc_config.sh ]; then
     . ~/Main/Additional_Config/system_specific_bashrc_config.sh
 fi
 for f in ~/.config/bash/aliases.d/*.sh; do [ -f "$f" ] && . "$f"; done
+for f in ~/.config/bash/functions.d/*.sh; do [ -f "$f" ] && . "$f"; done
 
 
 

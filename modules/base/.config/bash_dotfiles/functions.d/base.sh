@@ -19,10 +19,6 @@ mainr() {
 
 ###################### Most useful things ######################
 
-alias lsb="lsblk -f"
-alias show_file_sizes="du -h --max-depth=1 | sort -h -r"
-alias myrsync="rsync -av --info=progress2"
-
 
 # Save the current working directory into a variable as a name so you can later cd $var_name to get back to it
 # you can achieve this same behavior with the bashmarks extension though those paths last for more than one session
@@ -127,29 +123,6 @@ prettyDf() { # Call df for viewing remaining and total space on harddisk but pre
     df -h --total | tail -n 1
 }
 
-###########   Useful aliases and shortcuts   ###########
-alias ..='cd ..'
-alias cds='cds() { cd "$1" && ls; }; cds'
-alias restartxbindkeys="killall xbindkeys; xbindkeys"
-alias reloadbashrc="source ~/.bashrc"
-alias reloadbash="source ~/.bashrc"
-alias :r=reloadbash
-alias :q="exit"
-alias editbashrc="nvim ~/.bashrc"
-alias r="ranger_cd"
-alias lock="$HOME/Main/Scripts/Helper_Scripts/lock_screen.sh"
-alias notify="~/Main/Additional_Config/Scripts/timed_notification.sh"
-alias myTimer="~/Main/Additional_Config/Scripts/timed_notification.sh"
-alias myNotify="~/Main/Additional_Config/Scripts/timed_notification.sh"
-alias myTimerLog="echo 'Last 20 lines of notification log' && echo '' && cat ~/.notification_log | tail -n 20"
-alias myOpen="open . & disown"
-alias mySetBackground="$HOME/Main/Scripts/Helper_Scripts/set_background.sh"
-alias ram="python3 $HOME/Main/Scripts/RAM_Script_Python/main.py"
-alias myNautilusAndExit="nautilus . & exit"
-alias brown_noise="ffplay -nodisp $HOME/Main/Brown_Noise.mp3"
-alias mainVenvActivate=". ~/Main/Programming/Python/main_venv_3_10_14/bin/activate"
-alias darkMode="gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'"
-alias lightMode="gsettings set org.gnome.desktop.interface color-scheme 'default'"
 
 cw () {
     cd $1
