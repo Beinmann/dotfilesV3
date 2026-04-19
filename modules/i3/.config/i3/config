@@ -16,6 +16,8 @@ bindsym $mod+q kill
 exec --no-startup-id xinput set-prop "ELAN0529:00 04F3:3265 Touchpad" "libinput Natural Scrolling Enabled" 1
 exec --no-startup-id xinput set-prop "ELAN0529:00 04F3:3265 Touchpad" "libinput Tapping Enabled" 1
 
+exec --no-startup-id dunst &
+
 
         
 # Font for window titles. Will also be used by the bar unless a different font
