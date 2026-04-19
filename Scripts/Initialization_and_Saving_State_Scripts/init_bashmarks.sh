@@ -1,14 +1,21 @@
-if [ ! -f "$HOME/.sdirs" ]; then
-    cat > "$HOME/.sdirs" << 'EOF'
-export DIR_main="$HOME/Main"
-export DIR_downloads="$HOME/Downloads"
-export DIR_tools="$HOME/Main/Tools"
-export DIR_dotfiles="$HOME/Main/dotfilesV3"
-export DIR_nvim="$HOME/Main/dotfilesV3/modules/nvim/.config/nvim"
-export DIR_scripts="$HOME/Main/Scripts"
-export DIR_config="$HOME/.config"
-export DIR_i3="$HOME/.config/i3"
-export DIR_logs="/var/log"
-export DIR_applications="/usr/share/applications"
-EOF
-fi
+# Adds default bashmarks to ~/.sdirs, skipping any that are already defined.
+_add_bashmark() {
+    local name="$1"
+    local path="$2"
+    if ! grep -q "DIR_${name}=" "$HOME/.sdirs" 2>/dev/null; then
+        echo "export DIR_${name}=\"${path}\"" >> "$HOME/.sdirs"
+    fi
+}
+
+_add_bashmark main        '$HOME/Main'
+_add_bashmark downloads   '$HOME/Downloads'
+_add_bashmark tools       '$HOME/Main/Tools'
+_add_bashmark dotfiles    '$HOME/Main/dotfilesV3'
+_add_bashmark nvim        '$HOME/Main/dotfilesV3/modules/nvim/.config/nvim'
+_add_bashmark scripts     '$HOME/Main/Scripts'
+_add_bashmark config      '$HOME/.config'
+_add_bashmark i3          '$HOME/.config/i3'
+_add_bashmark logs        '/var/log'
+_add_bashmark applications '/usr/share/applications'
+
+unset -f _add_bashmark
