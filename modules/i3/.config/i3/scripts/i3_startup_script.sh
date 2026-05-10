@@ -16,6 +16,9 @@ setxkbmap -layout custom -variant basiccustom -print | xkbcomp -I$HOME/.config/x
 
 xbindkeys
 
+copyq &
+( sleep 2 && copyq config maxitems 1 ) &
+
 flatpak run org.mozilla.firefox &
 flatpak run md.obsidian.Obsidian &
 flatpak run com.bitwarden.desktop &

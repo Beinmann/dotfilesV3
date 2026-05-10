@@ -29,6 +29,7 @@ packages=(
   ripgrep
   make
   fzf
+  copyq
 )
 
 sudo apt -y install "${packages[@]}"
