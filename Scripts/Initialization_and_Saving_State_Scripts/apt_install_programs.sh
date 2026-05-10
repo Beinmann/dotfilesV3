@@ -30,6 +30,7 @@ packages=(
   make
   fzf
   copyq
+  trash-cli
 )
 
 sudo apt -y install "${packages[@]}"
