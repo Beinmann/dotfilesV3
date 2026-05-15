@@ -10,8 +10,6 @@ output_file=""
 no_shred=0
 timeout_duration=""
 unsafe_tmp=0
-encrypt_mode="symmetric"
-recipients=()
 
 usage() {
   cat <<EOF
@@ -24,7 +22,6 @@ Options:
   --output FILE        Write encrypted result to FILE instead of replacing input
   --no-shred           Use rm instead of shred for temporary plaintext cleanup
   --timeout DURATION   Kill Vim after duration, e.g. 10m, 1h
-  --recipient KEY      Encrypt output for recipient KEY; may be repeated
   --symmetric          Use symmetric GPG encryption; default
   --unsafe-tmp         Use /tmp if /dev/shm is unavailable or not tmpfs
   -h, --help           Show this help
@@ -33,7 +30,7 @@ Examples:
   $prog secret.gpg
   $prog --encrypted secret.txt
   $prog --output copy.gpg secret.gpg
-  $prog --recipient alice@example.com secret.gpg
+  $prog --plain notes.txt
 EOF
 }
 
@@ -56,10 +53,14 @@ is_tmpfs() {
   [[ "$(findmnt -n -o FSTYPE --target "$path" 2>/dev/null || true)" == "tmpfs" ]]
 }
 
-cleanup_file() {
-  local path="$1"
+file_hash() {
+  sha256sum -- "$1" | awk '{print $1}'
+}
 
-  [[ -n "${path:-}" && -e "$path" ]] || return 0
+cleanup_file() {
+  local path="${1:-}"
+
+  [[ -n "$path" && -e "$path" ]] || return 0
 
   if [[ "$no_shred" -eq 1 ]]; then
     rm -f -- "$path"
@@ -125,15 +126,7 @@ while [[ $# -gt 0 ]]; do
       timeout_duration="$2"
       shift 2
       ;;
-    --recipient)
-      [[ $# -ge 2 ]] || die "--recipient requires a key."
-      encrypt_mode="recipient"
-      recipients+=("$2")
-      shift 2
-      ;;
     --symmetric)
-      [[ "${#recipients[@]}" -eq 0 ]] || die "--symmetric cannot be used with --recipient."
-      encrypt_mode="symmetric"
       shift
       ;;
     --unsafe-tmp)
@@ -166,6 +159,8 @@ need_cmd vim
 need_cmd findmnt
 need_cmd stat
 need_cmd mktemp
+need_cmd sha256sum
+need_cmd awk
 
 [[ -e "$input_file" ]] || die "File does not exist: $input_file"
 [[ -f "$input_file" ]] || die "Not a regular file: $input_file"
@@ -179,6 +174,7 @@ if [[ "$mode" == "auto" ]]; then
   fi
 fi
 
+# Plain mode: safe Vim only. No GPG. No encryption. No output file.
 if [[ "$mode" == "plain" ]]; then
   [[ -z "$output_file" ]] || die "--output is only supported in encrypted mode."
   [[ -w "$input_file" ]] || die "File is not writable: $input_file"
@@ -187,24 +183,16 @@ if [[ "$mode" == "plain" ]]; then
   exit $?
 fi
 
-# encrypted mode
-
-if [[ -n "$output_file" && -e "$output_file" ]]; then
-  die "Output file already exists: $output_file"
-fi
-
-if [[ "$encrypt_mode" == "recipient" && "${#recipients[@]}" -eq 0 ]]; then
-  die "Recipient mode selected but no recipient was provided."
-fi
-
-if [[ "$encrypt_mode" == "symmetric" && "${#recipients[@]}" -gt 0 ]]; then
-  die "Internal option error: symmetric mode has recipients."
-fi
+# Encrypted mode starts here.
 
 input_dir="$(cd -- "$(dirname -- "$input_file")" && pwd)"
 input_base="$(basename -- "$input_file")"
 
 if [[ -n "$output_file" ]]; then
+  if [[ -e "$output_file" ]]; then
+    die "Output file already exists: $output_file"
+  fi
+
   output_dir="$(cd -- "$(dirname -- "$output_file")" && pwd)"
   output_base="$(basename -- "$output_file")"
   final_file="$output_dir/$output_base"
@@ -235,29 +223,41 @@ enc_tmp=""
 
 cleanup() {
   cleanup_file "$plain_tmp"
-  [[ -n "${enc_tmp:-}" && -e "$enc_tmp" ]] && rm -f -- "$enc_tmp"
-  [[ -d "${tmp_dir:-}" ]] && rmdir -- "$tmp_dir" 2>/dev/null || true
+
+  if [[ -n "${enc_tmp:-}" && -e "$enc_tmp" ]]; then
+    rm -f -- "$enc_tmp"
+  fi
+
+  if [[ -d "${tmp_dir:-}" ]]; then
+    rmdir -- "$tmp_dir" 2>/dev/null || true
+  fi
 }
+
 trap cleanup EXIT INT TERM
 
 umask 077
 
-gpg --quiet --decrypt -- "$input_file" > "$plain_tmp"
+if ! gpg --quiet --decrypt -- "$input_file" > "$plain_tmp"; then
+  die "Decryption failed or was cancelled."
+fi
+
+before_hash="$(file_hash "$plain_tmp")"
 
 if ! safe_vim "$plain_tmp"; then
   die "Vim exited unsuccessfully. Original file left unchanged."
 fi
 
+after_hash="$(file_hash "$plain_tmp")"
+
+if [[ "$before_hash" == "$after_hash" ]]; then
+  printf 'No changes detected. Original encrypted file left unchanged.\n'
+  exit 0
+fi
+
 enc_tmp="$(mktemp "$final_dir/.mySafeEdit.${input_base}.XXXXXX")"
 
-if [[ "$encrypt_mode" == "recipient" ]]; then
-  gpg_args=(--quiet --yes --encrypt --output "$enc_tmp")
-  for recipient in "${recipients[@]}"; do
-    gpg_args+=(--recipient "$recipient")
-  done
-  gpg "${gpg_args[@]}" -- "$plain_tmp"
-else
-  gpg --quiet --yes --symmetric --output "$enc_tmp" -- "$plain_tmp"
+if ! gpg --quiet --yes --symmetric --output "$enc_tmp" -- "$plain_tmp"; then
+  die "Encryption failed or was cancelled. Original file left unchanged."
 fi
 
 [[ -s "$enc_tmp" ]] || die "Encrypted output was not created or is empty."
@@ -270,4 +270,4 @@ fi
 mv -f -- "$enc_tmp" "$final_file"
 enc_tmp=""
 
-exit 0
+printf 'Encrypted file updated: %s\n' "$final_file"
