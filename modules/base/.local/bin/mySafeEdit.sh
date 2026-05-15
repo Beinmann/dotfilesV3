@@ -78,15 +78,8 @@ safe_vim() {
     -i NONE
     -u NONE
     -U NONE
-    --cmd 'set noswapfile'
-    --cmd 'set nobackup'
-    --cmd 'set nowritebackup'
-    --cmd 'set backupskip=*'
-    --cmd 'set noundofile'
-    --cmd 'silent! set viminfo='
-    --cmd 'silent! set shada='
-    --cmd 'set nomodeline'
-    --cmd 'silent! set clipboard='
+    --cmd 'set noswapfile nobackup nowritebackup noundofile nomodeline backupskip=* backspace=indent,eol,start'
+    --cmd 'silent! set viminfo= shada= clipboard='
     --cmd 'set secure'
     "$file"
   )
