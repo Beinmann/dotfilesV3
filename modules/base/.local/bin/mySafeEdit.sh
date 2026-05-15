@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# This file contains mainly AI generated code (ChatGPT)
+# This file contains mainly AI generated code
 set -euo pipefail
 
 prog="$(basename "$0")"
@@ -22,7 +22,6 @@ Options:
   --output FILE        Write encrypted result to FILE instead of replacing input
   --no-shred           Use rm instead of shred for temporary plaintext cleanup
   --timeout DURATION   Kill Vim after duration, e.g. 10m, 1h
-  --symmetric          Use symmetric GPG encryption; default
   --unsafe-tmp         Use /tmp if /dev/shm is unavailable or not tmpfs
   -h, --help           Show this help
 
@@ -125,9 +124,6 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || die "--timeout requires a duration."
       timeout_duration="$2"
       shift 2
-      ;;
-    --symmetric)
-      shift
       ;;
     --unsafe-tmp)
       unsafe_tmp=1
