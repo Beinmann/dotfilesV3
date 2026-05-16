@@ -6,13 +6,11 @@ fi
 
 autokey-gtk &
 
-source $HOME/.xinitrc
-
 # firefox &
 
 tilix -e bash -c "tmux a || tmux" &
 
-setxkbmap -layout custom -variant basiccustom -print | xkbcomp -I$HOME/.config/xkb -xkm - :0
+"$HOME/.config/dotfiles/scripts/keyboard-remap.sh" || true
 
 xbindkeys
 
