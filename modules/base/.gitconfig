@@ -11,6 +11,10 @@
 	# timeout = 10
 [init]
 	defaultBranch = main
+[rerere]
+	enabled = true
+[commit]
+	verbose = true
 [alias]
 	mylog = log --oneline -n 5
 [credential "https://github.com"]
