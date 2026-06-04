@@ -3,8 +3,11 @@ cpu=$(top -bn1 | grep "Cpu(s)" | awk '{print 100 - $8}')
 ram=$(free -h | awk '/^Mem:/ {print $3 "/" $2}')
 disk=$(df -h / | awk 'NR==2 {print $3 "/" $2 " (" $5 " used)"}')
 uptime=$(uptime -p | sed 's/^up //')
+date=$(date '+%d.%m.%Y')
 
-body="CPU:    ${cpu}%
+body="Date:   ${date}
+─────────────────
+CPU:    ${cpu}%
 RAM:    ${ram}
 Disk:   ${disk}
 Uptime: ${uptime}"
