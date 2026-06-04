@@ -9,11 +9,11 @@ separator_block_width=15
 markup=none
 
 
-# --- System info hint (click or mod+i to show notification) ---
+# --- System info hint (Win+i to show notification) ---
 
 [sysinfo-hint]
-command=$HOME/.config/i3/scripts/sysinfo_block.sh
-markup=pango
+command=echo " Win+i"
+markup=none
 interval=once
 color=#928374
 
