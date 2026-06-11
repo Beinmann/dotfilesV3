@@ -14,4 +14,6 @@ for w in $other_windows; do
     fi
 done
 
-[ "$new_win" -ne "$gap" ] && tmux move-window -s "$new_win" -t "$gap"
+if [ "$new_win" -ne "$gap" ]; then
+    tmux move-window -s "$new_win" -t "$gap"
+fi
