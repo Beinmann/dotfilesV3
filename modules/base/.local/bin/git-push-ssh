@@ -9,6 +9,13 @@
 #   -d, --default   Also persist the chosen key as this repo's default
 #                   (sets core.sshCommand in the local git config) before
 #                   pushing.
+#
+# If the target remote is https://, it's rewritten to the equivalent SSH
+# form (git@host:path) so the chosen key actually gets used - SSH key
+# selection is a no-op against an https:// remote otherwise, since git
+# falls back to its HTTP credential helper instead. Without -d the
+# rewrite only applies to this one push; with -d the remote's URL is
+# permanently changed via `git remote set-url`.
 set -euo pipefail
 
 prog="git-push-ssh"
@@ -50,6 +57,30 @@ fi
 
 keypath="$HOME/.ssh/$selected"
 ssh_cmd="ssh -i $keypath -o IdentitiesOnly=yes"
+
+# GIT_SSH_COMMAND/core.sshCommand only affect git's own invocations of
+# `ssh` - they're silently ignored against an https:// remote (git falls
+# back to its HTTP credential helper instead, e.g. a browser oauth
+# prompt). If the target remote (first arg, defaulting to origin) is
+# https://, rewrite it to the equivalent SSH form so the chosen key is
+# actually used.
+target_remote="${args[0]:-origin}"
+case "$target_remote" in
+    -*) target_remote="origin" ;;
+esac
+
+if remote_url=$(git remote get-url "$target_remote" 2>/dev/null) \
+    && [[ "$remote_url" =~ ^https://([^/]+)/(.+)$ ]]; then
+    ssh_url="git@${BASH_REMATCH[1]}:${BASH_REMATCH[2]}"
+    echo "$prog: $target_remote is an https:// remote ($remote_url) - rewriting to $ssh_url so the selected key is used" >&2
+    if [ "$make_default" -eq 1 ]; then
+        git remote set-url "$target_remote" "$ssh_url"
+    elif [ "${args[0]:-}" = "$target_remote" ]; then
+        args[0]="$ssh_url"
+    else
+        args=("$ssh_url" "${args[@]}")
+    fi
+fi
 
 if [ "$make_default" -eq 1 ]; then
     git config core.sshCommand "$ssh_cmd"
