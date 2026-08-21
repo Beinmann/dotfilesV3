@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Interactively pick an SSH key (fuzzy-matched via fzf) to use for a single
+# `git push`. Named `git-push-ssh` so it also works as `git push-ssh` -
+# git resolves unknown subcommands to a `git-<name>` executable on PATH.
+#
+# Usage:
+#   git push-ssh [-d|--default] [-- ] [git push args...]
+#
+#   -d, --default   Also persist the chosen key as this repo's default
+#                   (sets core.sshCommand in the local git config) before
+#                   pushing.
+set -euo pipefail
+
+prog="git-push-ssh"
+make_default=0
+args=()
+
+for arg in "$@"; do
+    case "$arg" in
+        -d|--default)
+            make_default=1
+            ;;
+        *)
+            args+=("$arg")
+            ;;
+    esac
+done
+
+if [ "$make_default" -eq 1 ] && ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "$prog: not inside a git repository, can't set a default key here" >&2
+    exit 1
+fi
+
+keys=()
+for pub in "$HOME"/.ssh/*.pub; do
+    [ -e "$pub" ] || continue
+    keys+=("${pub%.pub}")
+done
+
+if [ "${#keys[@]}" -eq 0 ]; then
+    echo "$prog: no SSH keys found in $HOME/.ssh (no *.pub files)" >&2
+    exit 1
+fi
+
+selected=$(printf '%s\n' "${keys[@]}" | xargs -n1 basename | fzf --prompt="ssh key for push> ")
+if [ -z "$selected" ]; then
+    echo "$prog: no key selected, aborting" >&2
+    exit 1
+fi
+
+keypath="$HOME/.ssh/$selected"
+ssh_cmd="ssh -i $keypath -o IdentitiesOnly=yes"
+
+if [ "$make_default" -eq 1 ]; then
+    git config core.sshCommand "$ssh_cmd"
+    echo "$prog: set core.sshCommand for this repo to use $selected" >&2
+fi
+
+exec env GIT_SSH_COMMAND="$ssh_cmd" git push "${args[@]}"
