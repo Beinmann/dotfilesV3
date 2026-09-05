@@ -365,9 +365,20 @@ _ge_goto() {
             cd -- "${matches[0]}"
             ;;
         *)
-            echo "ge: multiple entries match '$prefix' in $base, refusing:" >&2
-            printf '  %s\n' "${matches[@]}" >&2
-            return 1
+            if command -v fzf >/dev/null 2>&1; then
+                local pick
+                pick=$(printf '%s\n' "${matches[@]}" | fzf --prompt="ge: multiple matches for '$prefix' > ")
+                if [ -n "$pick" ]; then
+                    cd -- "$pick"
+                else
+                    echo "ge: no selection made, refusing" >&2
+                    return 1
+                fi
+            else
+                echo "ge: multiple entries match '$prefix' in $base, refusing:" >&2
+                printf '  %s\n' "${matches[@]}" >&2
+                return 1
+            fi
             ;;
     esac
 }
