@@ -317,6 +317,102 @@ mynew() {
 }
 
 
+# Shared implementation for ge/gel: find "<yy><seq>[-suffix]" under $3 and cd
+# into it. Errors out if zero or more than one entry matches.
+_ge_goto() {
+    local id="$1" year_arg="$2" base="$3"
+
+    if [ -z "$id" ] || ! [[ "$id" =~ ^[0-9]+$ ]]; then
+        echo "usage: id must be numeric, e.g. 'ge 1'" >&2
+        return 1
+    fi
+
+    local year
+    if [ -n "$year_arg" ]; then
+        if [[ "$year_arg" =~ ^[0-9]{4}$ ]]; then
+            year=${year_arg:2:2}
+        elif [[ "$year_arg" =~ ^[0-9]{2}$ ]]; then
+            year=$year_arg
+        else
+            echo "invalid year '$year_arg' - use e.g. 25 or 2025" >&2
+            return 1
+        fi
+    else
+        year=$(date +%y)
+    fi
+
+    if [ ! -d "$base" ]; then
+        echo "not a dir: $base" >&2
+        return 1
+    fi
+
+    local prefix
+    prefix=$(printf '%s%04d' "$year" "$id")
+
+    local matches=() entry name
+    for entry in "$base"/*/; do
+        entry=${entry%/}
+        name=${entry##*/}
+        [[ "$name" =~ ^${prefix}(-[A-Za-z0-9]+)?$ ]] && matches+=("$entry")
+    done
+
+    case "${#matches[@]}" in
+        0)
+            echo "ge: no entry '$prefix' found in $base" >&2
+            return 1
+            ;;
+        1)
+            cd -- "${matches[0]}"
+            ;;
+        *)
+            echo "ge: multiple entries match '$prefix' in $base, refusing:" >&2
+            printf '  %s\n' "${matches[@]}" >&2
+            return 1
+            ;;
+    esac
+}
+
+# g (bashmarks) + e (Everything): jump to the bashmark "e" (see bashmarks.sh)
+# then cd into the "<yy><seq>[-suffix]" entry matching <id>, defaulting to
+# the current year. Errors out if none or several entries match.
+#
+# Usage: ge <id> [year]
+#   ge 1        -> ~/Main/Everything/<currentyear>0001[-suffix]
+#   ge 1 25     -> .../250001[-suffix]
+#   ge 1 2025   -> .../250001[-suffix]
+ge() {
+    if [ -z "$1" ]; then
+        echo "usage: ge <id> [year]" >&2
+        return 1
+    fi
+
+    local sdirs="${SDIRS:-$HOME/.sdirs}"
+    [ -f "$sdirs" ] && source "$sdirs"
+
+    local target
+    target="$(eval $(echo echo $(echo \$DIR_e)))"
+    if [ ! -d "$target" ]; then
+        echo "ge: bashmark 'e' is not set to a valid dir (set it with: s e)" >&2
+        return 1
+    fi
+
+    _ge_goto "$1" "$2" "$target"
+}
+
+# Same as ge, but searches the current directory instead of jumping to the
+# "e" bashmark first - handy when you're already inside an Everything dir.
+#
+# Usage: gel <id> [year]
+gel() {
+    if [ -z "$1" ]; then
+        echo "usage: gel <id> [year]" >&2
+        return 1
+    fi
+
+    _ge_goto "$1" "$2" "$(pwd)"
+}
+
+
 ################## Cut copy and paste functions ########
 
 # used for quickly cutting, copying and pasting files
