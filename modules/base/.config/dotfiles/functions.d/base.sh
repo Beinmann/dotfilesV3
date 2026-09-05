@@ -317,6 +317,26 @@ mynew() {
 }
 
 
+# Given a path to a "<yy><seq>[-suffix]" entry dir, print the name of its
+# sidecar note file (minus ".md"), or the entry's own dirname if it has none.
+# See duh() above for the same sidecar convention.
+_ge_sidecar_name() {
+    local entry="$1"
+    local base="${entry%/*}"
+    local name="${entry##*/}"
+    [ "$base" = "$entry" ] && base="."
+
+    local sidecar
+    sidecar=$(find "$base" -maxdepth 1 -type f -name "${name}_*.md" -print -quit)
+
+    if [ -n "$sidecar" ]; then
+        sidecar=${sidecar##*/}
+        echo "${sidecar%.md}"
+    else
+        echo "$name"
+    fi
+}
+
 # Shared implementation for ge/gel: find "<yy><seq>[-suffix]" under $3 and cd
 # into it. Errors out if zero or more than one entry matches.
 _ge_goto() {
@@ -363,11 +383,17 @@ _ge_goto() {
             ;;
         1)
             cd -- "${matches[0]}"
+            echo "ge: $(_ge_sidecar_name "${matches[0]}")"
             ;;
         *)
             if command -v fzf >/dev/null 2>&1; then
-                local pick
-                pick=$(printf '%s\n' "${matches[@]}" | fzf --prompt="ge: multiple matches for '$prefix' > ")
+                local pick entry_display=()
+                for entry in "${matches[@]}"; do
+                    entry_display+=("$(_ge_sidecar_name "$entry")"$'\t'"$entry")
+                done
+                pick=$(printf '%s\n' "${entry_display[@]}" |
+                    fzf --with-nth=1 --delimiter=$'\t' --prompt="ge: multiple matches for '$prefix' > " |
+                    cut -f2)
                 if [ -n "$pick" ]; then
                     cd -- "$pick"
                 else
