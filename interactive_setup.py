@@ -11,6 +11,7 @@ re-derived by walking directories, globbed, or applied to a directory.
 """
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,9 @@ SYS_MODULES_DIR = "sys_modules"
 BACKUPS_DIR = "backups"
 GITIGNORE_FILE = ".gitignore"
 STOW_HELPER = "init_or_deinit_stow.py"
+INIT_SCRIPTS_DIR = os.path.join("Scripts", "Initialization_and_Saving_State_Scripts")
+APT_INSTALL_SCRIPT = os.path.join(INIT_SCRIPTS_DIR, "apt_install_programs.sh")
+BASHMARKS_SCRIPT = os.path.join(INIT_SCRIPTS_DIR, "init_bashmarks.sh")
 
 # Matches stow's conflict lines, e.g.:
 #   "  * existing target is neither a link nor a directory: .bashrc"
@@ -203,9 +207,49 @@ def resolve_conflicts_interactively(conflicts):
         backup_conflicts(conflicts)
 
 
+def install_packages(mode):
+    subprocess.run(["bash", APT_INSTALL_SCRIPT, mode], check=True)
+
+
+def set_default_bashmarks():
+    subprocess.run(["bash", "-c", f"source {shlex.quote(BASHMARKS_SCRIPT)}"], check=True)
+
+
+def top_level_prompt():
+    entries = [
+        ("essential", "install necessary packages (git, stow)", False),
+        ("additional", "install additional packages (the rest)", False),
+        ("bashmarks", "set default bashmarks", False),
+        ("modules", "customize modules", False),
+    ]
+    defaults = {"essential", "bashmarks", "modules"}
+
+    print("dotfilesv3 interactive setup")
+    print("============================")
+    print("Select which setup steps to run.")
+
+    return checkbox_prompt(entries, checked=defaults)
+
+
 def main():
     repo_root = os.path.dirname(os.path.abspath(__file__))
     os.chdir(repo_root)
+
+    steps = top_level_prompt()
+
+    if "essential" in steps:
+        print("\nInstalling necessary packages (git, stow)...")
+        install_packages("essential")
+    if "additional" in steps:
+        print("\nInstalling additional packages...")
+        install_packages("additional")
+    if "bashmarks" in steps:
+        print("\nSetting default bashmarks...")
+        set_default_bashmarks()
+
+    if "modules" not in steps:
+        print("\nSkipping module customization.")
+        return
 
     home_module_names = discover_modules(MODULES_DIR)
     sys_module_names = discover_modules(SYS_MODULES_DIR)
@@ -220,9 +264,7 @@ def main():
         entries.append((None, "sys_modules (require sudo)", True))
         entries += [(f"sys/{name}", f"sys/{name}", False) for name in sys_module_names]
 
-    print("dotfilesv3 interactive setup")
-    print("============================")
-    print("Select which modules to activate on this machine.")
+    print("\nSelect which modules to activate on this machine.")
     print(f"(defaults pre-filled from {MODULE_LIST_TEMPLATE})")
 
     selected = checkbox_prompt(entries, checked=defaults)
