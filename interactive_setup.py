@@ -42,11 +42,13 @@ def discover_modules(directory):
     )
 
 
-def parse_template_defaults():
-    """Active (uncommented) entries in .module_list_template, e.g. {"base", "sys/services"}."""
+def parse_module_defaults():
+    """Active (uncommented) entries in .module_list if it exists, else
+    .module_list_template, e.g. {"base", "sys/services"}."""
+    source = MODULE_LIST_FILE if os.path.isfile(MODULE_LIST_FILE) else MODULE_LIST_TEMPLATE
     defaults = set()
-    if os.path.isfile(MODULE_LIST_TEMPLATE):
-        with open(MODULE_LIST_TEMPLATE) as f:
+    if os.path.isfile(source):
+        with open(source) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):
@@ -256,7 +258,8 @@ def main():
         print("No modules found under modules/ or sys_modules/, nothing to do.")
         sys.exit(0)
 
-    defaults = parse_template_defaults()
+    defaults = parse_module_defaults()
+    defaults_source = MODULE_LIST_FILE if os.path.isfile(MODULE_LIST_FILE) else MODULE_LIST_TEMPLATE
 
     entries = [(name, name, False) for name in home_module_names]
     if sys_module_names:
@@ -264,7 +267,7 @@ def main():
         entries += [(f"sys/{name}", f"sys/{name}", False) for name in sys_module_names]
 
     print("\nSelect which modules to activate on this machine.")
-    print(f"(defaults pre-filled from {MODULE_LIST_TEMPLATE})")
+    print(f"(defaults pre-filled from {defaults_source})")
 
     selected = checkbox_prompt(entries, checked=defaults)
 
