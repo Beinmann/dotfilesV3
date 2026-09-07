@@ -212,6 +212,10 @@ def install_packages(mode):
     subprocess.run(["bash", APT_INSTALL_SCRIPT, mode], check=True)
 
 
+def update_submodules():
+    subprocess.run(["git", "submodule", "update", "--init", "--recursive"], check=True)
+
+
 def set_default_bashmarks():
     subprocess.run(["bash", "-c", f"source {BASHMARKS_SCRIPT}"], check=True)
 
@@ -220,10 +224,11 @@ def top_level_prompt():
     entries = [
         ("essential", "install necessary packages (git, stow)", False),
         ("additional", "install additional packages (the rest)", False),
+        ("submodules", "update git submodules (git submodule update --init --recursive)", False),
         ("bashmarks", "set default bashmarks", False),
         ("modules", "customize modules", False),
     ]
-    defaults = {"essential", "bashmarks", "modules"}
+    defaults = {"essential", "submodules", "bashmarks", "modules"}
 
     print("dotfilesv3 interactive setup")
     print("============================")
@@ -244,6 +249,9 @@ def main():
     if "additional" in steps:
         print("\nInstalling additional packages...")
         install_packages("additional")
+    if "submodules" in steps:
+        print("\nUpdating git submodules...")
+        update_submodules()
     if "bashmarks" in steps:
         print("\nSetting default bashmarks...")
         set_default_bashmarks()
