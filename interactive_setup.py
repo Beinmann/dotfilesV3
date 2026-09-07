@@ -11,7 +11,6 @@ re-derived by walking directories, globbed, or applied to a directory.
 """
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -212,7 +211,7 @@ def install_packages(mode):
 
 
 def set_default_bashmarks():
-    subprocess.run(["bash", "-c", f"source {shlex.quote(BASHMARKS_SCRIPT)}"], check=True)
+    subprocess.run(["bash", "-c", f"source {BASHMARKS_SCRIPT}"], check=True)
 
 
 def top_level_prompt():
