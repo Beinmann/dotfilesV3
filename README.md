@@ -10,6 +10,17 @@ A modular dotfiles setup for a Linux desktop running i3. The core idea is that e
 
 ## Setup
 
+### Remote bootstrap (fresh machine, nothing cloned yet)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Beinmann/dotfilesv3/main/bootstrap.sh | bash
+```
+
+Installs `git` if missing, clones this repo into `~/Main/dotfilesv3`, and hands
+off to the guided setup below. Refuses to run if your current directory is
+already inside a git repo (to avoid cloning into the wrong place), and
+refuses to run if `~/Main/dotfilesv3` already exists.
+
 ### Prerequisites
 
 Install required packages (i3, stow, neovim, tilix, rofi, i3blocks, picom, and others):
