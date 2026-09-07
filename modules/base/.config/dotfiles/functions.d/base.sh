@@ -337,13 +337,55 @@ _ge_sidecar_name() {
     fi
 }
 
-# Shared implementation for ge/gel: find "<yy><seq>[-suffix]" under $3 and cd
+# Shared "matches -> cd" tail for ge/gel: cd straight in on a single match,
+# otherwise offer an fzf picker (or list-and-refuse if fzf isn't installed).
+# $1 = label to prefix messages with (e.g. "ge"/"gel"), $2 = human-readable
+# description of what was searched for (used in messages only), rest = matches.
+_ge_pick_and_cd() {
+    local label="$1" reason="$2"
+    shift 2
+    local matches=("$@")
+
+    case "${#matches[@]}" in
+        0)
+            echo "$label: no entry matching '$reason' found" >&2
+            return 1
+            ;;
+        1)
+            cd -- "${matches[0]}"
+            echo "$label: $(_ge_sidecar_name "${matches[0]}")"
+            ;;
+        *)
+            if command -v fzf >/dev/null 2>&1; then
+                local pick entry_display=() entry
+                for entry in "${matches[@]}"; do
+                    entry_display+=("$(_ge_sidecar_name "$entry")"$'\t'"$entry")
+                done
+                pick=$(printf '%s\n' "${entry_display[@]}" |
+                    fzf --with-nth=1 --delimiter=$'\t' --prompt="$label: multiple matches for '$reason' > " |
+                    cut -f2)
+                if [ -n "$pick" ]; then
+                    cd -- "$pick"
+                else
+                    echo "$label: no selection made, refusing" >&2
+                    return 1
+                fi
+            else
+                echo "$label: multiple entries match '$reason', refusing:" >&2
+                printf '  %s\n' "${matches[@]}" >&2
+                return 1
+            fi
+            ;;
+    esac
+}
+
+# Shared implementation for ge/gel: find "<yy><seq>[-suffix]" under $4 and cd
 # into it. Errors out if zero or more than one entry matches.
 _ge_goto() {
-    local id="$1" year_arg="$2" base="$3"
+    local label="$1" id="$2" year_arg="$3" base="$4"
 
     if [ -z "$id" ] || ! [[ "$id" =~ ^[0-9]+$ ]]; then
-        echo "usage: id must be numeric, e.g. 'ge 1'" >&2
+        echo "usage: id must be numeric, e.g. '$label 1'" >&2
         return 1
     fi
 
@@ -376,37 +418,36 @@ _ge_goto() {
         [[ "$name" =~ ^${prefix}(-[A-Za-z0-9]+)?$ ]] && matches+=("$entry")
     done
 
-    case "${#matches[@]}" in
-        0)
-            echo "ge: no entry '$prefix' found in $base" >&2
-            return 1
-            ;;
-        1)
-            cd -- "${matches[0]}"
-            echo "ge: $(_ge_sidecar_name "${matches[0]}")"
-            ;;
-        *)
-            if command -v fzf >/dev/null 2>&1; then
-                local pick entry_display=()
-                for entry in "${matches[@]}"; do
-                    entry_display+=("$(_ge_sidecar_name "$entry")"$'\t'"$entry")
-                done
-                pick=$(printf '%s\n' "${entry_display[@]}" |
-                    fzf --with-nth=1 --delimiter=$'\t' --prompt="ge: multiple matches for '$prefix' > " |
-                    cut -f2)
-                if [ -n "$pick" ]; then
-                    cd -- "$pick"
-                else
-                    echo "ge: no selection made, refusing" >&2
-                    return 1
-                fi
-            else
-                echo "ge: multiple entries match '$prefix' in $base, refusing:" >&2
-                printf '  %s\n' "${matches[@]}" >&2
-                return 1
-            fi
-            ;;
-    esac
+    _ge_pick_and_cd "$label" "$prefix" "${matches[@]}"
+}
+
+# String-search variant of _ge_goto: instead of an id, take a substring to
+# grep sidecar filenames for (case-insensitive), under $3. A sidecar is named
+# "<yy><seq>[-suffix]_<description>[@tags].md" (see mynew() above), so the
+# entry dirname is everything before the first "_". cd's straight in on a
+# single match, otherwise offers the same fzf picker as _ge_goto.
+_ge_goto_string() {
+    local label="$1" needle="$2" base="$3"
+
+    if [ ! -d "$base" ]; then
+        echo "not a dir: $base" >&2
+        return 1
+    fi
+
+    local matches=() sidecar filename dirname entry
+    for sidecar in "$base"/*_*.md; do
+        [ -e "$sidecar" ] || continue
+        filename=${sidecar##*/}
+        case "${filename,,}" in
+            *"${needle,,}"*)
+                dirname=${filename%%_*}
+                entry="$base/$dirname"
+                [ -d "$entry" ] && matches+=("$entry")
+                ;;
+        esac
+    done
+
+    _ge_pick_and_cd "$label" "$needle" "${matches[@]}"
 }
 
 # g (bashmarks) + e (Everything): jump to the bashmark "e" (see bashmarks.sh)
@@ -433,20 +474,30 @@ ge() {
         return 1
     fi
 
-    _ge_goto "$1" "$2" "$target"
+    _ge_goto "ge" "$1" "$2" "$target"
 }
 
 # Same as ge, but searches the current directory instead of jumping to the
 # "e" bashmark first - handy when you're already inside an Everything dir.
 #
+# Accepts either a numeric id (like ge) or free text: if the argument is
+# all-digits it's treated as an id (optionally with a year in $2), otherwise
+# it's grepped against sidecar filenames (see _ge_goto_string()) and you land
+# straight in the single match, or get the usual fzf picker on multiple.
+#
 # Usage: gel <id> [year]
+#        gel <text>
 gel() {
     if [ -z "$1" ]; then
-        echo "usage: gel <id> [year]" >&2
+        echo "usage: gel <id-or-text> [year]" >&2
         return 1
     fi
 
-    _ge_goto "$1" "$2" "$(pwd)"
+    if [[ "$1" =~ ^[0-9]+$ ]]; then
+        _ge_goto "gel" "$1" "$2" "$(pwd)"
+    else
+        _ge_goto_string "gel" "$1" "$(pwd)"
+    fi
 }
 
 
