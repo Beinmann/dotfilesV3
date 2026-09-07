@@ -450,31 +450,27 @@ _ge_goto_string() {
     _ge_pick_and_cd "$label" "$needle" "${matches[@]}"
 }
 
-# g (bashmarks) + e (Everything): jump to the bashmark "e" (see bashmarks.sh)
-# then cd into the "<yy><seq>[-suffix]" entry matching <id>, defaulting to
-# the current year. Errors out if none or several entries match.
+# g (bashmarks) + e (Everything): thin wrapper that jumps to the bashmark
+# "e" (see bashmarks.sh) and then hands off to gel, i.e. it's just
+# "g e && gel <whatever you gave it>". See gel() below for what it accepts
+# (numeric id, optionally with year, or free text searched against sidecars).
 #
 # Usage: ge <id> [year]
+#        ge <text>
 #   ge 1        -> ~/Main/Everything/<currentyear>0001[-suffix]
 #   ge 1 25     -> .../250001[-suffix]
 #   ge 1 2025   -> .../250001[-suffix]
+#   ge fire     -> greps sidecars for "fire"
 ge() {
-    if [ -z "$1" ]; then
-        echo "usage: ge <id> [year]" >&2
-        return 1
-    fi
-
     local sdirs="${SDIRS:-$HOME/.sdirs}"
     [ -f "$sdirs" ] && source "$sdirs"
 
-    local target
-    target="$(eval $(echo echo $(echo \$DIR_e)))"
-    if [ ! -d "$target" ]; then
+    if [ ! -d "$DIR_e" ]; then
         echo "ge: bashmark 'e' is not set to a valid dir (set it with: s e)" >&2
         return 1
     fi
 
-    _ge_goto "ge" "$1" "$2" "$target"
+    g e && gel "$@"
 }
 
 # Same as ge, but searches the current directory instead of jumping to the
