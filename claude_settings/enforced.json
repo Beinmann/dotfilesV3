@@ -1,12 +1,5 @@
 {
-  "model": "sonnet",
-  "modelSettings": {
-    "claude-sonnet-5": {
-      "effortLevel": "medium"
-    }
-  },
   "autoUpdatesChannel": "latest",
-  "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
   "remoteControlAtStartup": false,
   "hooks": {
