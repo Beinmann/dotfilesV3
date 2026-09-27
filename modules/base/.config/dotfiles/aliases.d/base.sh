@@ -28,4 +28,4 @@ alias show_file_sizes="du -h --max-depth=1 | sort -h -r"
 alias myrsync="rsync -av --info=progress2"
 alias lsg="ls | grep -i"
 
-alias lse='everything list'  # list every Everything dir, see ~/.local/bin/everything
+alias lse='everything entries'  # list the entries of the Everything dir you're in, see ~/.local/bin/everything
