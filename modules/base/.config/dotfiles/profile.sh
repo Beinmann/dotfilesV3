@@ -38,3 +38,12 @@ if [ -f "$profile_extensions" ]; then
     . "$profile_extensions"
 fi
 unset profile_extensions
+
+# Login bash shells read ~/.profile instead of ~/.bashrc when there is no
+# ~/.bash_profile, and the managed block can leave ~/.profile with nothing else
+# in it (the distro default that does this is gone). Pull ~/.bashrc in, as the
+# Debian default ~/.profile does -- unless it already ran earlier in this
+# shell (bashrc.sh sets the variable), so it isn't sourced twice.
+if [ -n "$BASH_VERSION" ] && [ -z "$DOTFILES_BASHRC_LOADED" ] && [ -f "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+fi
