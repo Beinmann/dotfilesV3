@@ -307,7 +307,7 @@ gel() {
 # picking is done by `everything pick` (see ~/.local/bin/everything); this only
 # does the cd, which a subprocess can't do for the shell.
 #
-# Usage: cde [--root <path>] [<text>]
+# Usage: cde [<text>]
 #   cde          -> fzf picker over every Everything dir
 #   cde archive  -> cd straight in if one path contains "archive", else picker
 cde() {
