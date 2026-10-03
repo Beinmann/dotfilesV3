@@ -297,6 +297,13 @@ class StowHelper:
             os.unlink(path)
             print(f"Removed {path}")
 
+    def unfold_before_unstow(self, home_modules):
+        # A fold left by an older layout over a dir several modules own makes
+        # `stow -D` abort ("unstow_contents() called with invalid target").
+        for module in home_modules:
+            for dir_path in NON_FOLDING_DIRS.get(module, []):
+                self.unfold_existing(os.path.expanduser(dir_path), home_modules)
+
     def ensure_non_folding_dirs(self, home_modules):
         for module in home_modules:
             for dir_path in NON_FOLDING_DIRS.get(module, []):
@@ -353,6 +360,7 @@ class StowHelper:
 
         if self.args.restow:
             print("--- Unstowing ---")
+            self.unfold_before_unstow(home_modules)
             self.stow_all(home_modules, sys_modules, deinit=True)
             self.prune_dangling_links(home_modules)
             print("--- Stowing ---")
@@ -360,7 +368,9 @@ class StowHelper:
             self.ensure_non_folding_dirs(home_modules)
             self.stow_all(home_modules, sys_modules, deinit=False)
         else:
-            if not self.args.deinit:
+            if self.args.deinit:
+                self.unfold_before_unstow(home_modules)
+            else:
                 self.remove_stale_links(home_modules)
                 self.ensure_non_folding_dirs(home_modules)
             self.stow_all(home_modules, sys_modules, deinit=self.args.deinit)
