@@ -726,8 +726,6 @@ OVERVIEW = [
         ("gel", "like ge, but searches the current dir", "gel fire"),
         ("cde", "cd to one Everything dir, via text match or fzf", "cde archive"),
         ("lse", "alias for `everything entries`", "lse -a"),
-        ("myrm", "delete the entry you're in + sidecar (trash if possible), cd to its parent",
-         "myrm"),
         ("mynew", "create the next entry in the current Everything dir and cd into it",
          "mynew \"some idea\" ai"),
     ]),
@@ -876,7 +874,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--label", default="everything new", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_new)
 
-    p = sub.add_parser("remove", help="delete the entry you're in and its sidecar (used by myrm)",
+    p = sub.add_parser("remove", help="delete the entry you're in and its sidecar",
                        description="Run inside an entry dir (or below it). Shows what the "
                        "entry holds - id, sidecar, size, file count, last change, and warnings "
                        "for git repos with uncommitted or unpushed work and for symlinks - "
@@ -885,7 +883,7 @@ def build_parser() -> argparse.ArgumentParser:
                        "or trash-put) if one is installed, else they are deleted for good; "
                        "the prompt says which. Refuses outside an entry, without exactly one "
                        "sidecar, for a symlink or mount point, and without a terminal. Prints "
-                       "the parent dir on success; myrm wraps this to cd there.")
+                       "the parent dir on success, so a shell function could cd there.")
     p.add_argument("--label", default="everything remove", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_remove)
 

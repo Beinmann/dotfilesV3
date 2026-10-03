@@ -2195,22 +2195,6 @@ class RemoveCommandTest(TreeTest):
         _, _, err = self.run_remove("\n")
         self.assertIn("  WARNING: git repo 'r': state could not be read", err)
 
-    def test_myrm_shell_function_cds_to_parent_and_stays_on_failure(self):
-        functions = os.path.join(REPO, "modules", "base", ".config", "dotfiles",
-                                 "functions.d", "base.sh")
-        script = (f'everything() {{ [ "$1" = remove ] && echo "{self.ev}"; }}; '
-                  f'source "{functions}"; myrm && pwd')
-        res = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
-                             cwd=self.entry, env={**os.environ, "HOME": self.home})
-        self.assertEqual((res.returncode, res.stdout), (0, self.ev + "\n"), res.stderr)
-        # the real CLI refuses without a terminal and the shell stays where it was
-        res = subprocess.run(["bash", "-c", f'everything() {{ "{SHIM}" "$@"; }}; '
-                             f'source "{functions}"; myrm; echo $?; pwd'],
-                             capture_output=True, text=True, cwd=self.entry,
-                             stdin=subprocess.DEVNULL, env={**os.environ, "HOME": self.home})
-        self.assertEqual(res.stdout.splitlines(), ["1", self.entry])
-        self.assertTrue(os.path.isdir(self.entry))
-
 
 class HelpCommandTest(unittest.TestCase):
     def overview_names(self, group):
