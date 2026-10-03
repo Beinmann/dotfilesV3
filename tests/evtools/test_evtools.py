@@ -425,7 +425,7 @@ class PickCommandTest(TreeTest):
     def test_cde_changes_dir(self):
         functions = os.path.join(REPO, "modules", "base", ".config", "dotfiles",
                                  "functions.d", "base.sh")
-        script = f'everything() {{ "{SHIM}" "$@"; }}; source "{functions}"; cde archive && pwd'
+        script = f'source "{functions}"; everything() {{ "{SHIM}" "$@"; }}; cde archive && pwd'
         res = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
                              env={**os.environ, "HOME": self.home})
         self.assertEqual(res.returncode, 0, res.stderr)
@@ -437,7 +437,7 @@ class PickCommandTest(TreeTest):
         self.save(self.p("LinkToEverything"))
         functions = os.path.join(REPO, "modules", "base", ".config", "dotfiles",
                                  "functions.d", "base.sh")
-        script = f'everything() {{ "{SHIM}" "$@"; }}; source "{functions}"; cde linkto && pwd'
+        script = f'source "{functions}"; everything() {{ "{SHIM}" "$@"; }}; cde linkto && pwd'
         res = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
                              env={**os.environ, "HOME": self.home})
         self.assertEqual(res.returncode, 0, res.stderr)
@@ -581,7 +581,7 @@ class GotoCommandTest(TreeTest):
     def run_bash(self, cmd, cwd=None):
         functions = os.path.join(REPO, "modules", "base", ".config", "dotfiles",
                                  "functions.d", "base.sh")
-        script = f'everything() {{ "{SHIM}" "$@"; }}; source "{functions}"; {cmd}'
+        script = f'source "{functions}"; everything() {{ "{SHIM}" "$@"; }}; {cmd}'
         return subprocess.run(["bash", "-c", script], capture_output=True, text=True, cwd=cwd,
                               env={**os.environ, "HOME": self.home})
 
@@ -1167,7 +1167,7 @@ class NewCommandTest(TreeTest):
         self.mk(f"{year}0005-abc")
         res = subprocess.run(
             ["bash", "-c",
-             f'everything() {{ "{SHIM}" "$@"; }}; source "{self.functions()}"; '
+             f'source "{self.functions()}"; everything() {{ "{SHIM}" "$@"; }}; '
              'mynew "Hello World" ai && pwd'],
             input="nry\n", capture_output=True, text=True, cwd=self.ev,
             env={**os.environ, "HOME": self.home})
@@ -1339,7 +1339,7 @@ class NewCommandTest(TreeTest):
     def test_mynew_in_empty_dir_from_shell(self):
         self.devbox("nry\n")
         res = subprocess.run(
-            ["bash", "-c", f'everything() {{ "{SHIM}" "$@"; }}; source "{self.functions()}"; '
+            ["bash", "-c", f'source "{self.functions()}"; everything() {{ "{SHIM}" "$@"; }}; '
              'mynew "Hello" && pwd'],
             capture_output=True, text=True, cwd=self.ev, stdin=subprocess.DEVNULL,
             env={**os.environ, "HOME": self.home})
@@ -2194,6 +2194,30 @@ class RemoveCommandTest(TreeTest):
         os.makedirs(os.path.join(self.entry, "r", ".git"))
         _, _, err = self.run_remove("\n")
         self.assertIn("  WARNING: git repo 'r': state could not be read", err)
+
+
+    def test_everything_function_cds_after_remove_and_passes_the_rest_through(self):
+        functions = os.path.join(REPO, "modules", "base", ".config", "dotfiles",
+                                 "functions.d", "base.sh")
+        fake = os.path.join(self.stub_bin, "everything")  # the command on PATH
+        with open(fake, "w") as f:
+            f.write(f'#!/bin/sh\nif [ "$1" = remove ]; then echo "{self.ev}"; '
+                    'else echo "args: $*"; fi\n')
+        os.chmod(fake, 0o755)
+        env = {**os.environ, "HOME": self.home, "PATH": self.stub_bin + os.pathsep + os.environ["PATH"]}
+
+        def run(cmd):
+            return subprocess.run(["bash", "-c", f'source "{functions}"; {cmd}'],
+                                  capture_output=True, text=True, cwd=self.entry, env=env)
+        res = run("everything remove --label x; echo rc=$?; pwd")
+        self.assertEqual(res.stdout.splitlines(), ["rc=0", self.ev], res.stderr)
+        res = run("everything list --paths; pwd")
+        self.assertEqual(res.stdout.splitlines(), ["args: list --paths", self.entry])
+        # a failing remove leaves the shell where it is
+        with open(fake, "w") as f:
+            f.write("#!/bin/sh\nexit 1\n")
+        res = run("everything remove; echo rc=$?; pwd")
+        self.assertEqual(res.stdout.splitlines(), ["rc=1", self.entry])
 
 
 class HelpCommandTest(unittest.TestCase):
