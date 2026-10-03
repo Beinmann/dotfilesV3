@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
@@ -23,24 +24,23 @@ class ManagedBlockTest(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.home = tmp.name
         self.rc = os.path.join(self.home, ".bashrc")
-        self.skel = os.path.join(self.home, "skel_bashrc")
 
     def read(self, path=None):
         with open(path or self.rc) as f:
             return f.read()
 
-    def test_no_file_no_skel_creates_block_only(self):
+    def test_no_file_creates_block_only(self):
         self.assertEqual(ios.add_managed_block(self.rc, BLOCK), "added")
         self.assertEqual(self.read(), f"{BEGIN}\n{BLOCK}{END}\n")
         self.assertFalse(os.path.exists(self.rc + ios.BACKUP_SUFFIX))
 
-    def test_missing_file_seeded_from_skel(self):
-        with open(self.skel, "w") as f:
-            f.write("# distro default\nalias ll='ls -l'\n")
-        ios.add_managed_block(self.rc, BLOCK, skel=self.skel)
-        text = self.read()
-        self.assertTrue(text.startswith("# distro default\nalias ll='ls -l'\n"))
-        self.assertTrue(text.endswith(f"{BEGIN}\n{BLOCK}{END}\n"))
+    def test_missing_file_not_seeded_from_skel(self):
+        # The caller (manage_bashrc) must not pull in /etc/skel/.bashrc.
+        with mock.patch.object(ios, "add_managed_block", wraps=ios.add_managed_block) as m, \
+                mock.patch("os.path.expanduser", return_value=self.rc):
+            ios.StowHelper.manage_bashrc(mock.Mock(), deinit=False)
+        self.assertNotIn("skel", m.call_args.kwargs)
+        self.assertEqual(self.read(), f"{BEGIN}\n{BLOCK}{END}\n")
 
     def test_existing_customizations_kept_block_at_end(self):
         original = "export FOO=1\n# nvm stuff\n"

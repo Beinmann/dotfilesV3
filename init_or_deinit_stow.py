@@ -86,12 +86,13 @@ def block_markers(name=BLOCK_NAME):
     return f"# >>> {name} >>>", f"# <<< {name} <<<"
 
 
-def add_managed_block(path, block, name=BLOCK_NAME, skel=None):
+def add_managed_block(path, block, name=BLOCK_NAME):
     """Append a marked block to the end of `path`; return what was done.
 
-    Idempotent. A missing file is seeded from `skel` (or left empty); an
-    existing file is backed up once to `path` + BACKUP_SUFFIX and its lines
-    are never modified. Refuses to write through a symlink.
+    Idempotent. A missing file is created containing only the block (never
+    seeded from the distro skel); an existing file is backed up once to
+    `path` + BACKUP_SUFFIX and its lines are never modified. Refuses to
+    write through a symlink.
     """
     begin, end = block_markers(name)
     if os.path.islink(path):
@@ -112,9 +113,6 @@ def add_managed_block(path, block, name=BLOCK_NAME, skel=None):
             shutil.copy2(path, backup)
     else:
         content = ""
-        if skel and os.path.isfile(skel):
-            with open(skel) as f:
-                content = f.read()
     if content and not content.endswith("\n"):
         content += "\n"
     if content:
@@ -168,7 +166,7 @@ class StowHelper:
             print("Warning: ~/.bash_profile exists, so login bash shells ignore "
                   "~/.profile and may never read ~/.bashrc.")
         try:
-            result = add_managed_block(path, BASHRC_BLOCK, skel="/etc/skel/.bashrc")
+            result = add_managed_block(path, BASHRC_BLOCK)
         except ManagedBlockError as e:
             print(f"Error: {e}")
             return
