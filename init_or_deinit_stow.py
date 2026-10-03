@@ -60,15 +60,37 @@ PERSISTENT_FILES = [
 NON_FOLDING_DIRS = {
     "ai": ["~/.claude", "~/.local/bin", "~/.config/dotfiles/aliases.d"],
     "base": ["~/.local/bin", "~/.config/dotfiles/aliases.d"],
+    "i3": [
+        "~/.local/bin",
+        "~/.local/share/applications",
+        "~/.config/dotfiles/aliases.d",
+    ],
     "services": [
         "~/.config/systemd/user/timers.target.wants",
         "~/.local/bin",
     ],
 }
 
-# Symlinks an earlier layout of the modules left in $HOME. Removed (only if
-# they still point into a module dir) before stowing.
-STALE_LINKS = ["~/.config/bash_dotfiles"]
+# Symlinks an earlier layout of the modules left in $HOME. Removed before
+# stowing, but only if they point into a module dir at something that no
+# longer exists (so the links the current layout creates at the same paths,
+# e.g. after files moved from base to i3, are never touched).
+STALE_LINKS = [
+    # ticket 030: ai aliases moved to ~/.config/dotfiles
+    "~/.config/bash_dotfiles",
+    # ticket 032: desktop files moved from base to i3
+    "~/.Xresources",
+    "~/.xbindkeysrc",
+    "~/.config/xkb",
+    "~/.config/dunst",
+    "~/.config/sway",
+    "~/.config/dotfiles/scripts",
+    "~/Main/Scripts/Startup_Script",
+    "~/Main/Scripts/Helper_Scripts",
+    "~/Main/Data",
+    "~/.local/bin/myScreenshot",
+    "~/.local/share/applications/startup_script_with_programs.desktop",
+]
 
 
 BASHRC_BLOCK = """\
@@ -220,6 +242,8 @@ class StowHelper:
             if not os.path.islink(expanded):
                 continue
             target = os.path.realpath(expanded)
+            if os.path.exists(target):
+                continue
             if any(os.path.commonpath([target, root]) == root for root in module_roots):
                 os.unlink(expanded)
                 print(f"Removed stale symlink {expanded} (pointed to {target})")

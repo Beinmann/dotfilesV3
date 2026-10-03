@@ -56,9 +56,16 @@ class SharedAliasesTest(unittest.TestCase):
 
     def test_stale_bash_dotfiles_link_removed(self):
         stale = os.path.join(self.home, ".config/bash_dotfiles")
-        os.symlink(os.path.join(self.modules, "ai", ALIASES), stale)
+        os.symlink(os.path.join(self.modules, "ai", ".config/bash_dotfiles"), stale)
         self.helper.remove_stale_links(["base", "ai"])
         self.assertFalse(os.path.lexists(stale))
+
+    def test_stale_link_with_existing_target_is_kept(self):
+        # e.g. a current-layout link at a path that is also in STALE_LINKS
+        stale = os.path.join(self.home, ".config/bash_dotfiles")
+        os.symlink(os.path.join(self.modules, "ai", ALIASES), stale)
+        self.helper.remove_stale_links(["base", "ai"])
+        self.assertTrue(os.path.islink(stale))
 
     def test_stale_link_pointing_elsewhere_is_kept(self):
         stale = os.path.join(self.home, ".config/bash_dotfiles")
