@@ -3,6 +3,8 @@
 # Uses MemAvailable, so reclaimable cache doesn't count as used.
 # Keeps the block's configured color below 70%, then yellow, orange, red.
 
+set -euo pipefail
+
 awk '
 /^MemTotal:/     { total = $2 }
 /^MemAvailable:/ { avail = $2 }

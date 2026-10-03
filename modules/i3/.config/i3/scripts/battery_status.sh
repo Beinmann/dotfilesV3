@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# No strict mode: tolerates missing or unreadable sysfs files; the exit code
+# is meaningful to i3blocks (33 = urgent).
 # i3blocks battery block: level + charge state, colored by level.
 # Warning color at <= 15%, red and urgent (exit 33) at <= 5%.
 # Prints nothing when there's no battery, which hides the block.

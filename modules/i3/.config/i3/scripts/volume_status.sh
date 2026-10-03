@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# No strict mode: persistent block; pactl and the grep filter may fail while the
+# sound server restarts, and the loop has to keep going.
 # i3blocks volume block (persistent): icon + percentage of the default sink,
 # redrawn on every pulse/pipewire sink event. Display only, no click handling.
 # Needs markup=pango and the FontAwesome font (see battery_status.sh).

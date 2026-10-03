@@ -1,4 +1,6 @@
 #!/bin/bash
+# No strict mode: a best-effort hook that must always exit 0, also outside
+# tmux ($TMUX_PANE unset) and without a tty.
 #
 # Emit a terminal bell into the invoking tmux pane so that tmux's
 # bell-monitoring flags the window when Claude finishes responding or

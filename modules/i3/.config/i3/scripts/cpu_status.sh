@@ -2,6 +2,8 @@
 # i3blocks CPU block: total usage over a one second sample, from /proc/stat.
 # Yellow at >= 50%, red at >= 80%.
 
+set -euo pipefail
+
 sample() {
     local _ user nice system idle_t iowait irq softirq steal
     read -r _ user nice system idle_t iowait irq softirq steal _ < /proc/stat
