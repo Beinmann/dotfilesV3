@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import shutil
 import subprocess
 import sys
 import argparse
@@ -63,6 +64,80 @@ NON_FOLDING_DIRS = {
 }
 
 
+BASHRC_BLOCK = """\
+[ -f ~/.config/dotfiles/bashrc.sh ] && . ~/.config/dotfiles/bashrc.sh
+"""
+BLOCK_NAME = "dotfiles"
+BACKUP_SUFFIX = ".pre-dotfiles"
+
+
+class ManagedBlockError(Exception):
+    pass
+
+
+def block_markers(name=BLOCK_NAME):
+    return f"# >>> {name} >>>", f"# <<< {name} <<<"
+
+
+def add_managed_block(path, block, name=BLOCK_NAME, skel=None):
+    """Append a marked block to the end of `path`; return what was done.
+
+    Idempotent. A missing file is seeded from `skel` (or left empty); an
+    existing file is backed up once to `path` + BACKUP_SUFFIX and its lines
+    are never modified. Refuses to write through a symlink.
+    """
+    begin, end = block_markers(name)
+    if os.path.islink(path):
+        raise ManagedBlockError(
+            f"{path} is a symlink (probably a stow link into this repo); "
+            f"not writing through it. Migrate by hand:\n"
+            f"  target=$(readlink -f {path})\n"
+            f"  rm {path}\n"
+            f"  cp \"$target\" {path}\n"
+            f"then run the init script again.")
+    if os.path.exists(path):
+        with open(path) as f:
+            content = f.read()
+        if begin in content:
+            return "present"
+        backup = path + BACKUP_SUFFIX
+        if not os.path.exists(backup):
+            shutil.copy2(path, backup)
+    else:
+        content = ""
+        if skel and os.path.isfile(skel):
+            with open(skel) as f:
+                content = f.read()
+    if content and not content.endswith("\n"):
+        content += "\n"
+    if content:
+        content += "\n"
+    content += f"{begin}\n{block}{end}\n"
+    with open(path, "w") as f:
+        f.write(content)
+    return "added"
+
+
+def remove_managed_block(path, name=BLOCK_NAME):
+    """Remove only the marked block (and the blank line before it)."""
+    begin, end = block_markers(name)
+    if os.path.islink(path) or not os.path.isfile(path):
+        return "absent"
+    with open(path) as f:
+        lines = f.read().split("\n")
+    try:
+        i = lines.index(begin)
+        j = lines.index(end, i)
+    except ValueError:
+        return "absent"
+    if i > 0 and lines[i - 1] == "":
+        i -= 1
+    del lines[i:j + 1]
+    with open(path, "w") as f:
+        f.write("\n".join(lines))
+    return "removed"
+
+
 class StowHelper:
     def __init__(self):
         self.args = parse_args()
@@ -75,6 +150,23 @@ class StowHelper:
             if not os.path.exists(filepath):
                 open(filepath, "a").close()
                 print(f"Created persistent file: {filepath}")
+
+    def manage_bashrc(self, deinit):
+        path = os.path.expanduser("~/.bashrc")
+        if deinit:
+            if remove_managed_block(path) == "removed":
+                print(f"Removed the dotfiles block from {path}")
+            return
+        if os.path.exists(os.path.expanduser("~/.bash_profile")):
+            print("Warning: ~/.bash_profile exists, so login bash shells ignore "
+                  "~/.profile and may never read ~/.bashrc.")
+        try:
+            result = add_managed_block(path, BASHRC_BLOCK, skel="/etc/skel/.bashrc")
+        except ManagedBlockError as e:
+            print(f"Error: {e}")
+            return
+        if result == "added":
+            print(f"Added the dotfiles block to {path}")
 
     def unfold_existing(self, path, home_modules):
         """Remove a stow fold at `path` or one of its parents below $HOME.
@@ -163,6 +255,9 @@ class StowHelper:
             if not self.args.deinit:
                 self.ensure_non_folding_dirs(home_modules)
             self.stow_all(home_modules, sys_modules, deinit=self.args.deinit)
+
+        if "base" in home_modules:
+            self.manage_bashrc(self.args.deinit)
 
         if not self.args.deinit and "ai" in home_modules:
             self.sync_claude_settings()
