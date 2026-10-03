@@ -7,6 +7,9 @@ case $- in
       *) return;;
 esac
 
+# Tells profile.sh that ~/.bashrc already ran in this shell. Not exported.
+DOTFILES_BASHRC_LOADED=1
+
 for f in ~/.config/dotfiles/settings.d/*.sh; do [ -f "$f" ] && . "$f"; done
 for f in ~/.config/dotfiles/aliases.d/*.sh; do [ -f "$f" ] && . "$f"; done
 for f in ~/.config/dotfiles/functions.d/*.sh; do [ -f "$f" ] && . "$f"; done
