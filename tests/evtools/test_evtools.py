@@ -2220,6 +2220,129 @@ class RemoveCommandTest(TreeTest):
         self.assertEqual(res.stdout.splitlines(), ["rc=1", self.entry])
 
 
+class InfoCommandTest(TreeTest):
+    def setUp(self):
+        super().setUp()
+        self.main = self.p("Main", "Everything")
+        self.entry = os.path.join(self.main, "250002-nry")
+        os.makedirs(os.path.join(self.entry, "sub"))
+        with open(os.path.join(self.entry, "sub", "data.txt"), "w") as f:
+            f.write("hello")
+
+    def run_info(self, *args, cwd=None, fzf=None, tty=False):
+        """Run `info` in `cwd`; `fzf` is None (not installed) or a function(rows) -> picked row."""
+        cwd = cwd or self.home
+        calls = []
+
+        def fake_run(cmd, input, **kw):
+            calls.append(input.splitlines())
+            row = fzf(input.splitlines())
+            return subprocess.CompletedProcess(cmd, 0 if row else 130,
+                                               stdout=(row + "\n") if row else "")
+        out, err = io.StringIO(), io.StringIO()
+        old = os.getcwd()
+        os.chdir(cwd)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
+                    mock.patch.dict(os.environ, {"PWD": cwd}), \
+                    mock.patch.object(sys, "stdin", io.StringIO("")), \
+                    mock.patch("shutil.which", return_value="/usr/bin/fzf" if fzf else None), \
+                    mock.patch("subprocess.run", side_effect=fake_run) if fzf else \
+                    contextlib.nullcontext():
+                rc = cli.main(["info", *args])
+        finally:
+            os.chdir(old)
+        self.calls = calls
+        return rc, out.getvalue(), err.getvalue()
+
+    def snapshot(self):
+        return sorted((os.path.join(d, n), os.lstat(os.path.join(d, n)).st_mtime_ns)
+                      for d, dn, fn in os.walk(self.home) for n in dn + fn)
+
+    def test_inside_an_entry_prints_the_summary(self):
+        before = self.snapshot()
+        rc, out, err = self.run_info(cwd=os.path.join(self.entry, "sub"))
+        self.assertEqual((rc, err), (0, ""))
+        for text in ("Entry:        250002-nry",
+                     "Sidecar:      250002-nry_first_note_@ai_@x.md",
+                     "Description:  first_note", "Tags:         @ai @x",
+                     "(1 file, 1 dir, 0 symlinks)", "Last changed: 20", "Location:     ~/Main/"):
+            self.assertIn(text, out)
+        self.assertNotIn("Type ", out + err)  # no delete prompt
+        self.assertEqual(self.snapshot(), before)
+
+    def test_shows_warnings(self):
+        os.makedirs(os.path.join(self.entry, "r", ".git"))
+        _, out, _ = self.run_info(cwd=self.entry)
+        self.assertIn("  WARNING: git repo 'r': state could not be read", out)
+
+    def test_symlinked_entry_is_fine_read_only(self):
+        open(os.path.join(self.main, "260002-lnk_linked.md"), "w").close()
+        link = os.path.join(self.main, "260002-lnk")
+        rc, out, _ = self.run_info(cwd=link)
+        self.assertEqual(rc, 0)
+        self.assertIn("Entry:        260002-lnk", out)
+
+    def test_entry_without_sidecar_is_reported_not_picked(self):
+        rc, out, err = self.run_info(cwd=os.path.join(self.main, "250001"),
+                                     fzf=lambda rows: self.fail("picker must not open"))
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("everything info: '250001' has no sidecar file next to it", err)
+        self.assertNotIn("nothing deleted", err)
+
+    def test_picker_default_scope_is_the_bashmark_dir(self):
+        self.save(self.main, self.p("Archive", "old_everything"))
+        other = self.p("Other-Everything")
+        os.makedirs(os.path.join(other, "260009-zzz"))
+        self.save(self.main, other)
+        rc, out, err = self.run_info(fzf=lambda rows: next(r for r in rows if "250002-nry" in r))
+        self.assertEqual((rc, err), (0, ""))
+        self.assertIn("Entry:        250002-nry", out)
+        rows = self.calls[0]
+        self.assertTrue(rows)
+        self.assertTrue(all(r.split("\t")[1].startswith(self.main + "/") for r in rows), rows)
+        self.assertFalse(any("260009" in r for r in rows))
+        self.assertIn("250002-nry  first_note  @ai @x\t" + self.entry, rows)
+
+    def test_picker_all_scope_uses_saved_dirs(self):
+        other = self.p("Other-Everything")
+        os.makedirs(os.path.join(other, "260009-zzz"))
+        open(os.path.join(other, "260009-zzz_far_away.md"), "w").close()
+        self.save(self.main, other)
+        rc, out, _ = self.run_info("--all", fzf=lambda rows: next(r for r in rows if "260009" in r))
+        self.assertEqual(rc, 0)
+        self.assertIn("Entry:        260009-zzz", out)
+        self.assertIn("Description:  far_away", out)
+        rows = self.calls[0]
+        self.assertIn("260009-zzz  far_away  [~/Other-Everything]\t" + os.path.join(other, "260009-zzz"), rows)
+        self.assertTrue(any("250002-nry" in r for r in rows))
+
+    def test_cancelled_picker_prints_nothing(self):
+        rc, out, err = self.run_info(fzf=lambda rows: None)
+        self.assertEqual((rc, out, err), (1, "", ""))
+
+    def test_no_fzf_gives_a_clear_message(self):
+        rc, out, err = self.run_info()
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("not inside an entry dir and fzf not found to pick one", err)
+
+    def test_no_bookmark_and_not_set_up(self):
+        os.remove(self.p(".sdirs"))
+        rc, _, err = self.run_info(fzf=lambda rows: rows[0])
+        self.assertEqual(rc, 1)
+        self.assertIn("bashmark 'e' is not set to a valid dir", err)
+        os.remove(saved_locations.list_file(self.home))
+        rc, _, err = self.run_info("-a", fzf=lambda rows: rows[0])
+        self.assertEqual(rc, 1)
+        self.assertIn("no list of Everything dirs yet", err)
+
+    def test_picker_modifies_nothing(self):
+        before = self.snapshot()
+        self.run_info(fzf=lambda rows: rows[-1])
+        self.run_info("-a", fzf=lambda rows: rows[0])
+        self.assertEqual(self.snapshot(), before)
+
+
 class HelpCommandTest(unittest.TestCase):
     def overview_names(self, group):
         return [name for name, _, _ in cli.OVERVIEW[group][1]]

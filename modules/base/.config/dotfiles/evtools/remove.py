@@ -32,8 +32,15 @@ class Method:
                 else "Will be PERMANENTLY DELETED (no trash tool found)")
 
 
-def find_entry(cwd: str) -> Target:
+class NotInEntry(Refusal):
+    """The cwd isn't inside any dir named like an entry."""
+
+
+def find_entry(cwd: str, for_delete: bool = True) -> Target:
     """The entry dir at or above `cwd` and its one sidecar; Refusal if unsafe or unclear.
+
+    `for_delete=False` (read-only callers like info) skips the symlink and
+    mount point refusals.
 
     Unlike rename, it never skips an entry dir that has no usable sidecar to
     reach an outer one: deleting a different entry than the one you are in
@@ -43,7 +50,7 @@ def find_entry(cwd: str) -> Target:
     while True:
         parent, name = os.path.split(path)
         if not name:
-            raise Refusal("not inside an entry dir - nothing deleted")
+            raise NotInEntry("not inside an entry dir - nothing deleted")
         if entries.parse_entry(name):
             break
         path = parent
@@ -54,9 +61,9 @@ def find_entry(cwd: str) -> Target:
     if len(found) > 1:
         raise Refusal(f"'{name}' has {len(found)} sidecar files ("
                       + ", ".join(s.name for s in found) + ") - fix that first, nothing deleted")
-    if os.path.islink(path):
+    if for_delete and os.path.islink(path):
         raise Refusal(f"'{name}' is a symlink, refusing to delete through it")
-    if os.path.ismount(path):
+    if for_delete and os.path.ismount(path):
         raise Refusal(f"'{name}' is a mount point, refusing")
     return Target(path, os.path.join(parent, found[0].name), found[0])
 
