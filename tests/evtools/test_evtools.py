@@ -20,7 +20,7 @@ from unittest import mock
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "modules", "base", ".config", "dotfiles"))
 
-from evtools import check, cli, discovery, entries, goto, new, stats  # noqa: E402
+from evtools import check, cli, discovery, entries, goto, new, saved_locations, stats  # noqa: E402
 
 SHIM = os.path.join(REPO, "modules", "base", ".local", "bin", "everything")
 
@@ -69,11 +69,24 @@ class TreeTest(unittest.TestCase):
         patcher = mock.patch.dict(os.environ, env)
         patcher.start()
         self.addCleanup(patcher.stop)
-        # keep default-root runs off the real system; subprocesses pass --root instead
+        # keep `scan` off the real system by default; subprocesses pass --root instead
         patcher = mock.patch.object(cli, "DEFAULT_ROOT", self.home)
         patcher.start()
         self.addCleanup(patcher.stop)
         self.addCleanup(self._tmp.cleanup)
+        # the saved list `scan` would have produced (links are other paths to saved dirs)
+        self.save(*discovery.find_everything_dirs(self.home, self.home))
+
+    def rescan(self):
+        """Save every Everything dir now in the fake home, like running `scan` and taking all."""
+        self.save(*discovery.find_everything_dirs(self.home, self.home))
+
+    def save(self, *dirs):
+        """Replace the saved list of Everything dirs in the fake home."""
+        path = saved_locations.list_file(self.home)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write("".join(d + "\n" for d in dirs))
 
     def p(self, *parts):
         return os.path.join(self.home, *parts)
@@ -170,21 +183,14 @@ class DiscoveryTest(TreeTest):
     def test_bookmark_missing_file(self):
         self.assertIsNone(discovery.bookmark_dir(self.p("no-such-sdirs")))
 
-    @mock.patch.object(discovery, "CACHE_ENABLED", True)
     def test_read_only(self):
-        cache_dir = self.p(".cache", "dotfiles")
-
         def snapshot():
-            # every path except the cache dir, the one thing allowed to be written
-            return sorted(os.path.join(d, n) for d, dn, fn in os.walk(self.home)
-                          for n in dn + fn
-                          if not os.path.join(d, n).startswith(cache_dir))
+            return sorted(os.path.join(d, n) for d, dn, fn in os.walk(self.home) for n in dn + fn)
         before = snapshot()
         discovery.find_everything_dirs(self.home, self.home)
         with contextlib.redirect_stdout(io.StringIO()):
-            cli.main(["list", "--root", self.home])
+            cli.main(["list"])
         self.assertEqual(snapshot(), before)
-        self.assertEqual(os.listdir(cache_dir), ["everything-dirs.json"])
 
 
 class EntriesTest(TreeTest):
@@ -241,11 +247,10 @@ class ListCommandTest(TreeTest):
         rc, out, _ = self.run_cli("list")
         self.assertEqual(rc, 0)
         self.assertEqual(out, """\
-Everything dirs under ~ (4 found, 1 nested, 1 symlink)
+Saved Everything dirs (3 dirs, 1 nested)
 
   PATH                                         ENTRIES  NEWEST        SUFFIX
   ~/Archive/old_everything                           0  -             -
-  ~/LinkToEverything → ~/Main/Everything             6  260002-lnk    (none),nry,abc,gel,lnk
 * ~/Main/Everything                                  6  260002-lnk    (none),nry,abc,gel,lnk
     └ ~/Main/Everything/250001/sub-everything        1  250001-sub    sub
 
@@ -253,26 +258,42 @@ Everything dirs under ~ (4 found, 1 nested, 1 symlink)
 """)
 
     def test_paths(self):
-        rc, out, _ = self.run_cli("list", "--paths", "--root", self.p("Main"))
+        self.save(self.p("Main", "Everything"),
+                  self.p("Main", "Everything", "250001", "sub-everything"))
+        rc, out, _ = self.run_cli("list", "--paths")
         self.assertEqual(rc, 0)
         self.assertEqual(out.splitlines(), [
             self.p("Main", "Everything"),
             self.p("Main", "Everything", "250001", "sub-everything"),
         ])
 
-    def test_paths_leave_out_links(self):
+    def test_saved_symlink_shows_target(self):
+        self.save(self.p("Archive", "old_everything"), self.p("LinkToEverything"))
+        rc, out, err = self.run_cli("list")
+        self.assertEqual((rc, err), (0, ""))
+        # the e bashmark is the same real dir as the link: listed once, as the link
+        self.assertIn("Saved Everything dirs (2 dirs, 0 nested, 1 symlink)", out)
+        self.assertIn("* ~/LinkToEverything → ~/Main/Everything  ", out)
+        self.assertNotIn("  ~/Main/Everything ", out)
+        self.assertIn("* = bashmark 'e'", out)
+
+    def test_same_real_dir_listed_once(self):
+        self.save(self.p("LinkToEverything"), self.p("Main", "Everything"))
         _, out, _ = self.run_cli("list", "--paths")
-        self.assertNotIn(self.p("LinkToEverything"), out.splitlines())
-        self.assertIn(self.p("Main", "Everything"), out.splitlines())
+        self.assertEqual(out.splitlines(), [self.p("LinkToEverything")])
 
     def test_broken_and_looping_links(self):
         os.symlink(self.p("gone"), self.p("Archive", "broken-everything"))
         os.symlink(self.p("Archive"), self.p("Archive", "loop-everything"))
-        rc, out, err = self.run_cli("list", "--root", self.p("Archive"))
-        self.assertEqual((rc, err), (0, ""))
+        self.save(self.p("Archive", "broken-everything"), self.p("Archive", "loop-everything"),
+                  self.p("Archive", "old_everything"))
+        rc, out, err = self.run_cli("list")
+        self.assertEqual(rc, 0)
+        self.assertEqual(err, "everything list: warning: saved dir ~/Archive/broken-everything "
+                              "no longer exists, skipping\n")
         self.assertNotIn("broken", out)
         self.assertIn("  ~/Archive/loop-everything → ~/Archive ", out)
-        self.assertIn("(2 found, 0 nested, 1 symlink)", out)
+        self.assertIn("(3 dirs, 0 nested, 1 symlink)", out)  # incl. the e bashmark dir
 
     def test_no_bookmark_no_marker(self):
         os.remove(self.p(".sdirs"))
@@ -281,20 +302,41 @@ Everything dirs under ~ (4 found, 1 nested, 1 symlink)
         self.assertIn("  ~/Main/Everything ", out)
 
     def test_outside_home_shows_full_paths(self):
-        with mock.patch.dict(os.environ, {"HOME": "/nonexistent-home"}):
-            _, out, _ = self.run_cli("list", "--root", self.p("Archive"))
-        self.assertIn(f"Everything dirs under {self.p('Archive')} (1 found", out)
+        other = self.p("other-home")
+        os.makedirs(os.path.join(other, ".config", "dotfiles", "system_local"))
+        with open(os.path.join(other, ".config", "dotfiles", "system_local", "everything-dirs"),
+                  "w") as f:
+            f.write(self.p("Archive", "old_everything") + "\n")
+        with mock.patch.dict(os.environ, {"HOME": other, "SDIRS": self.p("no-sdirs")}):
+            _, out, _ = self.run_cli("list")
+        self.assertIn("Saved Everything dirs (1 dir, 0 nested)", out)
         self.assertIn(f"  {self.p('Archive', 'old_everything')} ", out)
 
-    def test_errors(self):
-        rc, _, err = self.run_cli("list", "--root", self.p("nope"))
-        self.assertEqual((rc, err), (1, f"everything list: not a dir: {self.p('nope')}\n"))
-        rc, _, err = self.run_cli("list", "--root", self.p("elsewhere"))
+    def test_never_set_up_fails_with_hint(self):
+        os.remove(saved_locations.list_file(self.home))
+        for cmd in (["list"], ["list", "--paths"], ["pick"], ["goto", "--all", "x"],
+                    ["entries", "--all"], ["stats"], ["check"]):
+            rc, out, err = self.run_cli(*cmd)
+            self.assertEqual((rc, out), (1, ""), cmd)
+            self.assertIn("no list of Everything dirs yet - run `everything scan` or "
+                          "`everything mark`", err, cmd)
+
+    def test_empty_list_fails(self):
+        self.save()
+        os.remove(self.p(".sdirs"))
+        rc, _, err = self.run_cli("list")
         self.assertEqual(rc, 1)
-        self.assertIn("no Everything dirs under ~/elsewhere", err)
+        self.assertIn("no Everything dirs in the list", err)
+
+    def test_all_commands_never_walk_the_disk(self):
+        with mock.patch.object(discovery, "find_everything_dirs",
+                               side_effect=AssertionError("walked the disk")):
+            for cmd in (["list"], ["pick", "archive"], ["goto", "--all", "2", "25"],
+                        ["entries", "--all"], ["stats"], ["check"], ["locations"]):
+                self.run_cli(*cmd)
 
     def test_shim_runs_from_repo(self):
-        res = subprocess.run([SHIM, "list", "--paths", "--root", self.home], capture_output=True, text=True,
+        res = subprocess.run([SHIM, "list", "--paths"], capture_output=True, text=True,
                              env={**os.environ, "HOME": self.home})
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn(self.p("Main", "Everything"), res.stdout.splitlines())
@@ -341,6 +383,7 @@ class PickCommandTest(TreeTest):
         self.assertIn("--prompt=multiple matches for 'main' > ", cmd)
 
     def test_link_offered_and_printed_as_link_path(self):
+        self.save(self.p("Archive", "old_everything"), self.p("LinkToEverything"))
         with mock.patch("shutil.which", side_effect=AssertionError("fzf not needed")):
             rc, out, _ = self.run_cli("pick", "linkto")
         self.assertEqual((rc, out), (0, self.p("LinkToEverything") + "\n"))
@@ -352,12 +395,14 @@ class PickCommandTest(TreeTest):
         with mock.patch("shutil.which", return_value="/usr/bin/fzf"), \
                 mock.patch("subprocess.run", side_effect=fake_fzf):
             self.run_cli("pick")
-        self.assertIn("  ~/LinkToEverything → ~/Main/Everything             6  260002-lnk    "
+        self.assertIn("* ~/LinkToEverything → ~/Main/Everything        6  260002-lnk    "
                       "(none),nry,abc,gel,lnk\t" + self.p("LinkToEverything"), rows)
 
     def test_no_text_single_dir_skips_fzf(self):
+        self.save(self.p("Archive", "old_everything"))
+        os.remove(self.p(".sdirs"))  # the "e" bashmark dir is searched too
         with mock.patch("shutil.which", side_effect=AssertionError("fzf not needed")):
-            rc, out, err = self.run_cli("pick", "--root", self.p("Archive"))
+            rc, out, err = self.run_cli("pick")
         self.assertEqual((rc, out), (0, self.p("Archive", "old_everything") + "\n"))
         self.assertIn("only one Everything dir found", err)
 
@@ -379,7 +424,7 @@ class PickCommandTest(TreeTest):
     def test_cde_changes_dir(self):
         functions = os.path.join(REPO, "modules", "base", ".config", "dotfiles",
                                  "functions.d", "base.sh")
-        script = f'everything() {{ "{SHIM}" "$@"; }}; source "{functions}"; cde --root "$HOME" archive && pwd'
+        script = f'everything() {{ "{SHIM}" "$@"; }}; source "{functions}"; cde archive && pwd'
         res = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
                              env={**os.environ, "HOME": self.home})
         self.assertEqual(res.returncode, 0, res.stderr)
@@ -388,9 +433,10 @@ class PickCommandTest(TreeTest):
 
 
     def test_cde_via_link_keeps_link_path(self):
+        self.save(self.p("LinkToEverything"))
         functions = os.path.join(REPO, "modules", "base", ".config", "dotfiles",
                                  "functions.d", "base.sh")
-        script = f'everything() {{ "{SHIM}" "$@"; }}; source "{functions}"; cde --root "$HOME" linkto && pwd'
+        script = f'everything() {{ "{SHIM}" "$@"; }}; source "{functions}"; cde linkto && pwd'
         res = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
                              env={**os.environ, "HOME": self.home})
         self.assertEqual(res.returncode, 0, res.stderr)
@@ -543,7 +589,7 @@ class GotoCommandTest(TreeTest):
         self.assertEqual((res.returncode, res.stdout, res.stderr),
                          (0, self.p(self.main, "250002-nry") + "\n",
                           "ge: 250002-nry_first_note_@ai_@x\n"))
-        res = self.run_bash(f"ge --all --root {self.home} campfire && pwd")
+        res = self.run_bash(f"ge --all campfire && pwd")
         self.assertEqual(res.stdout, self.p(self.sub, "250001-sub") + "\n")
         res = self.run_bash("ge && pwd")
         self.assertEqual(res.stdout, self.main + "\n")
@@ -600,6 +646,7 @@ class StatsTest(TreeTest):
                                                     "260002-x"])]:
             for name in names:
                 os.makedirs(os.path.join(d, name))
+        self.rescan()
         st = stats.collect([a, b])
         self.assertEqual(len(st.ids), 3)
         self.assertEqual(st.shared_ids, {(b, 260001): ["gel", "nry"], (b, 260002): ["(none)", "x"]})
@@ -628,7 +675,7 @@ class StatsTest(TreeTest):
         rc, out, _ = self.run_cli("stats", "--dir", "main")
         self.assertEqual(rc, 0)
         self.assertEqual(out, """\
-Everything stats under ~ matching 'main'  (2 dirs, 7 entries, 4 sidecars)
+Everything stats for the saved dirs matching 'main'  (2 dirs, 7 entries, 4 sidecars)
 
 ENTRIES
   total entries   7
@@ -651,7 +698,7 @@ TAGS  (3 of 4 sidecars tagged, 3 distinct)
 """)
 
     def test_per_dir_and_empty_dir(self):
-        rc, out, _ = self.run_cli("stats", "--per-dir", "--root", self.p("Archive"))
+        rc, out, _ = self.run_cli("stats", "--per-dir", "--dir", "archive")
         self.assertEqual(rc, 0)
         self.assertEqual(out, """\
 Everything stats for ~/Archive/old_everything  (1 dir, 0 entries, 0 sidecars)
@@ -675,6 +722,7 @@ TAGS  (0 of 0 sidecars tagged)
     def test_single_shared_id_is_named(self):
         for name in ["260001", "260001-b", "260002-b"]:
             os.makedirs(self.p("Solo-Everything", name))
+        self.rescan()
         _, out, _ = self.run_cli("stats", "--dir", "solo")
         self.assertIn("  distinct ids    2   (260001 is used by 2 suffixes: (none), b)\n", out)
 
@@ -701,124 +749,13 @@ TAGS  (0 of 0 sidecars tagged)
         self.assertIn("everything stats: no Everything dir matching 'zzz'", err)
 
     def test_read_only(self):
-        # the discovery cache is the one allowed write, so enable it and leave it out
-        cache_dir = os.path.dirname(discovery.cache_file(self.home))
-        os.makedirs(cache_dir)  # so creating it doesn't touch ~/.cache's mtime
-
         def snapshot():
             return sorted((os.path.join(d, n), os.lstat(os.path.join(d, n)).st_mtime_ns)
-                          for d, dn, fn in os.walk(self.home) if not d.startswith(cache_dir)
-                          for n in dn + fn if os.path.join(d, n) != cache_dir)
+                          for d, dn, fn in os.walk(self.home) for n in dn + fn)
         before = snapshot()
-        with mock.patch.object(discovery, "CACHE_ENABLED", True):
-            for args in [(), ("--per-dir",), ("--json",)]:
-                self.run_cli("stats", *args)
-        self.assertTrue(os.path.exists(discovery.cache_file(self.home)))
+        for args in [(), ("--per-dir",), ("--json",)]:
+            self.run_cli("stats", *args)
         self.assertEqual(snapshot(), before)
-
-
-class CacheTest(TreeTest):
-    def setUp(self):
-        super().setUp()
-        patcher = mock.patch.object(discovery, "CACHE_ENABLED", True)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def find(self, root=None, fresh=False):
-        return discovery.find_everything_dirs_cached(root or self.home, self.home, fresh=fresh)
-
-    def test_miss_then_hit(self):
-        dirs, age = self.find()
-        self.assertIsNone(age)
-        self.assertEqual(dirs, discovery.find_everything_dirs(self.home, self.home))
-        with mock.patch.object(discovery, "find_everything_dirs",
-                               side_effect=AssertionError("should use cache")):
-            cached, age = self.find()
-        self.assertEqual(cached, dirs)
-        self.assertGreaterEqual(age, 0)
-
-    def test_new_dir_only_shows_after_expiry_or_fresh(self):
-        self.find()
-        new = self.p("New-Everything")
-        os.mkdir(new)
-        self.assertNotIn(new, self.find()[0])
-        self.assertIn(new, self.find(fresh=True)[0])
-        self.assertIn(new, self.find()[0])  # --fresh wrote the result back
-
-    def test_expiry(self):
-        self.find()
-        now = time.time()
-        with mock.patch("time.time", return_value=now + discovery.CACHE_TTL - 60):
-            self.assertIsNotNone(self.find()[1])
-        with mock.patch("time.time", return_value=now + discovery.CACHE_TTL + 1):
-            self.assertIsNone(self.find()[1])
-
-    def test_stale_paths_dropped_cache_still_valid(self):
-        self.find()
-        os.rmdir(self.p("Archive", "old_everything", "not-an-entry"))
-        os.rmdir(self.p("Archive", "old_everything"))
-        dirs, age = self.find()
-        self.assertIsNotNone(age)
-        self.assertNotIn(self.p("Archive", "old_everything"), dirs)
-
-    def test_links_cached_but_only_returned_on_request(self):
-        dirs, _ = self.find()
-        self.assertNotIn(self.p("LinkToEverything"), dirs)
-        with mock.patch.object(discovery, "find_everything_dirs",
-                               side_effect=AssertionError("should use cache")):
-            linked, age = discovery.find_everything_dirs_cached(self.home, self.home, links=True)
-        self.assertIsNotNone(age)
-        self.assertEqual(sorted(set(linked) - set(dirs)), [self.p("LinkToEverything")])
-
-    def test_separate_entry_per_root(self):
-        self.find()
-        dirs, age = self.find(self.p("Archive"))
-        self.assertIsNone(age)
-        self.assertEqual(dirs, [self.p("Archive", "old_everything")])
-        self.assertEqual(len(self.find()[0]), 3)
-
-    def test_separate_entry_per_network_flag(self):
-        self.find()
-        dirs, age = discovery.find_everything_dirs_cached(self.home, self.home, network=True)
-        self.assertIsNone(age)
-        self.assertEqual(dirs, self.find()[0])
-
-    def test_corrupt_cache_is_ignored(self):
-        path = discovery.cache_file(self.home)
-        os.makedirs(os.path.dirname(path))
-        with open(path, "w") as f:
-            f.write("{not json")
-        dirs, age = self.find()
-        self.assertIsNone(age)
-        self.assertTrue(dirs)
-        self.assertIsNotNone(self.find()[1])  # rewritten as valid JSON
-
-    def test_cli_notice_on_stderr_only(self):
-        ListCommandTest.run_cli(self, "list", "--paths")
-        rc, out, err = ListCommandTest.run_cli(self, "list", "--paths")
-        self.assertEqual(rc, 0)
-        self.assertEqual(err, "everything list: using cached Everything-dir list "
-                              "(<1 min old; --fresh to re-search)\n")
-        self.assertIn(self.p("Main", "Everything"), out.splitlines())
-        _, _, err = ListCommandTest.run_cli(self, "pick", "--fresh", "archive")
-        self.assertNotIn("cached", err)
-
-    def test_age_format(self):
-        self.assertEqual([cli._age(s) for s in (5, 60, 59 * 60, 2 * 3600 + 12 * 60)],
-                         ["<1 min", "1 min", "59 min", "2 h 12 min"])
-
-
-
-class CacheDisabledTest(TreeTest):
-    def test_disabled_always_searches_and_writes_nothing(self):
-        with mock.patch.object(discovery, "CACHE_ENABLED", False):
-            for _ in range(2):
-                rc, _, err = ListCommandTest.run_cli(self, "list", "--paths")
-                self.assertEqual((rc, err), (0, ""))
-            new = self.p("New-Everything")
-            os.mkdir(new)
-            self.assertIn(new, discovery.find_everything_dirs_cached(self.home, self.home)[0])
-        self.assertFalse(os.path.exists(self.p(".cache", "dotfiles")))
 
 
 class CheckTest(TreeTest):
@@ -836,6 +773,7 @@ class CheckTest(TreeTest):
                      "260005-b_orphan_@ai.md", "269999_lost_@ai.md",
                      ".mynew-suffix", "README.md", "260005-a.md", ".DS_Store"]:
             open(os.path.join(self.d, name), "w").close()
+        self.rescan()
 
     def found(self, dirs=None):
         (r,) = check.check([dirs or self.d])
@@ -908,7 +846,7 @@ class CheckTest(TreeTest):
         self.assertNotIn("MINOR", out)
         self.assertIn("    notes" + " " * 27 + "dir name isn't a <yy><seq>[-suffix] id\n", out)
         self.assertRegex(out.splitlines()[-1],
-                         r"^1 Everything dir checked \(matching 'check-everything'\) under ~: "
+                         r"^1 Everything dir checked \(matching 'check-everything'\): "
                          r"8 major, 4 medium; 0 clean \(\d+ minor hidden, --all-levels to show\)$")
         rc, out, _ = self.run_cli("check", "--dir", "check-everything", "--all-levels")
         self.assertIn("\n  MINOR\n", out)
@@ -918,14 +856,15 @@ class CheckTest(TreeTest):
         d = self.p("Clean-Everything")
         os.makedirs(os.path.join(d, "260001-a"))
         open(os.path.join(d, "260001-a_ok_@x.md"), "w").close()
+        self.rescan()
         rc, out, _ = self.run_cli("check", "--dir", "clean-everything")
-        self.assertEqual((rc, out), (0, "1 Everything dir checked (matching 'clean-everything') "
-                                        "under ~: 0 major, 0 medium; 1 clean\n"))
+        self.assertEqual((rc, out), (0, "1 Everything dir checked (matching 'clean-everything'): "
+                                        "0 major, 0 medium; 1 clean\n"))
         rc, out, _ = self.run_cli("check")  # every discovered dir, clean ones not listed
         self.assertEqual(rc, 1)
         self.assertIn("~/Main/Everything\n", out)
         self.assertNotIn("~/Clean-Everything", out)
-        self.assertRegex(out.splitlines()[-1], r"^5 Everything dirs checked under ~: ")
+        self.assertRegex(out.splitlines()[-1], r"^5 Everything dirs checked: ")
 
     def test_json(self):
         rc, out, _ = self.run_cli("check", "--dir", "check-everything", "--json")
@@ -947,17 +886,12 @@ class CheckTest(TreeTest):
         self.assertIn("everything check: no Everything dir matching 'zzz'", err)
 
     def test_read_only(self):
-        cache_dir = os.path.dirname(discovery.cache_file(self.home))
-        os.makedirs(cache_dir)
-
         def snapshot():
             return sorted((os.path.join(d, n), os.lstat(os.path.join(d, n)).st_mtime_ns)
-                          for d, dn, fn in os.walk(self.home) if not d.startswith(cache_dir)
-                          for n in dn + fn if os.path.join(d, n) != cache_dir)
+                          for d, dn, fn in os.walk(self.home) for n in dn + fn)
         before = snapshot()
-        with mock.patch.object(discovery, "CACHE_ENABLED", True):
-            for args in [(), ("--all-levels",), ("--json",)]:
-                self.run_cli("check", *args)
+        for args in [(), ("--all-levels",), ("--json",)]:
+            self.run_cli("check", *args)
         self.assertEqual(snapshot(), before)
 
 
@@ -1039,7 +973,7 @@ ENTRY       DESCRIPTION  TAGS
         rc, out, _ = self.run_cli("entries", "--all")
         self.assertEqual(rc, 0)
         self.assertEqual(out, """\
-Entries of every Everything dir under ~ (7 entries in 3 dirs)
+Entries of every saved Everything dir (7 entries in 3 dirs)
 
 ENTRY       DESCRIPTION  TAGS    EVERYTHING DIR
 250001                           ~/Main/Everything
@@ -1292,6 +1226,345 @@ def everything_wrappers():
     return {n for n in wrappers if not n.startswith("_")}
 
 
+class Tty(io.StringIO):
+    """stdin that claims to be a terminal, answering from the given text."""
+    def isatty(self):
+        return True
+
+
+class SavedLocationsTest(TreeTest):
+    def setUp(self):
+        super().setUp()
+        os.remove(saved_locations.list_file(self.home))
+
+    def listed(self):
+        return saved_locations.load()
+
+    def test_missing_file_is_not_set_up(self):
+        self.assertIsNone(self.listed())
+        with self.assertRaises(saved_locations.NotSetUp):
+            saved_locations.all_dirs()
+
+    def test_list_file_lives_in_system_local(self):
+        self.assertEqual(saved_locations.list_file(self.home), self.p(
+            ".config", "dotfiles", "system_local", "everything-dirs"))
+
+    def test_add_creates_file_and_dir_and_dedupes(self):
+        d = self.p("Main", "Everything")
+        self.assertTrue(saved_locations.add(d))
+        self.assertFalse(saved_locations.add(d))
+        self.assertEqual(self.listed(), [d])
+        # another path to the same real dir counts as saved
+        self.assertFalse(saved_locations.add(self.p("LinkToEverything")))
+        self.assertEqual(self.listed(), [d])
+
+    def test_comments_and_blank_lines_are_ignored_and_kept(self):
+        path = saved_locations.list_file(self.home)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(f"# mine\n\n  {self.p('Archive')}  \n# note\n")
+        self.assertEqual(self.listed(), [self.p("Archive")])
+        saved_locations.add(self.p("Main"))
+        with open(path) as f:
+            self.assertEqual(f.read(), f"# mine\n# note\n{self.p('Archive')}\n{self.p('Main')}\n")
+
+    def test_remove(self):
+        saved_locations.add(self.p("Archive"))
+        saved_locations.add(self.p("Main"))
+        self.assertTrue(saved_locations.remove(self.p("Archive")))
+        self.assertFalse(saved_locations.remove(self.p("Archive")))
+        self.assertEqual(self.listed(), [self.p("Main")])
+
+    def test_write_leaves_no_temp_files(self):
+        saved_locations.add(self.p("Archive"))
+        saved_locations.remove(self.p("Archive"))
+        self.assertEqual(os.listdir(os.path.dirname(saved_locations.list_file(self.home))),
+                         ["everything-dirs"])
+
+    def test_all_dirs_adds_bookmark_once_and_reports_missing(self):
+        main = self.p("Main", "Everything")
+        saved_locations.add(self.p("LinkToEverything"))  # same real dir as the bookmark
+        saved_locations.add(self.p("Archive", "old_everything"))
+        saved_locations.add(self.p("gone"))
+        found = saved_locations.all_dirs()
+        self.assertEqual(found.dirs, [self.p("Archive", "old_everything"),
+                                      self.p("LinkToEverything")])
+        self.assertEqual(found.missing, [self.p("gone")])
+        self.assertNotIn(main, found.dirs)
+
+    def test_all_dirs_with_bookmark_in_list(self):
+        main = self.p("Main", "Everything")
+        saved_locations.add(main)
+        self.assertEqual(saved_locations.all_dirs().dirs, [main])
+
+    def test_missing_dir_warning_on_all_commands(self):
+        self.save(self.p("gone"), self.p("Main", "Everything"))
+        for cmd in (["list"], ["pick"], ["entries", "--all"], ["stats"], ["check"],
+                    ["goto", "--all", "2", "25"]):
+            _, _, err = ListCommandTest.run_cli(self, *cmd)
+            self.assertIn("everything %s: warning: saved dir ~/gone no longer exists, skipping\n"
+                          % cmd[0], err, cmd)
+
+
+class EnclosingDirTest(TreeTest):
+    def test_marked_dir_counts_even_without_everything_in_name(self):
+        d = self.p("Work", "notes")
+        os.makedirs(os.path.join(d, "deeper"))
+        self.assertIsNone(discovery.enclosing_everything_dir(os.path.join(d, "deeper")))
+        self.assertEqual(discovery.enclosing_everything_dir(os.path.join(d, "deeper"), [d]), d)
+        # compared by real path, so a link to a marked dir works too
+        os.symlink(d, self.p("notes-link"))
+        self.assertEqual(discovery.enclosing_everything_dir(self.p("notes-link", "deeper"), [d]),
+                         self.p("notes-link"))
+
+    def test_nested_dir_needs_its_own_mark(self):
+        outer, inner = self.p("Work", "outer"), self.p("Work", "outer", "inner")
+        os.makedirs(inner)
+        self.assertEqual(discovery.enclosing_everything_dir(inner, [outer]), outer)
+        self.assertEqual(discovery.enclosing_everything_dir(inner, [outer, inner]), inner)
+
+    def test_lse_in_a_marked_dir(self):
+        d = self.p("Work", "notes")
+        os.makedirs(os.path.join(d, "260001-x"))
+        os.chdir(d)
+        self.addCleanup(os.chdir, "/")
+        self.assertEqual(ListCommandTest.run_cli(self, "entries")[0], 1)
+        saved_locations.add(d)
+        rc, out, _ = ListCommandTest.run_cli(self, "entries")
+        self.assertEqual(rc, 0)
+        self.assertIn("260001-x", out)
+
+
+class LocationCommandsTest(TreeTest):
+    run_cli = ListCommandTest.run_cli
+
+    def run_in(self, args, stdin="", tty=False, cwd=None):
+        out, err = io.StringIO(), io.StringIO()
+        old = os.getcwd()
+        os.chdir(cwd or self.home)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
+                    mock.patch.object(sys, "stdin", (Tty if tty else io.StringIO)(stdin)), \
+                    mock.patch.dict(os.environ, {"PWD": cwd or self.home}), \
+                    mock.patch("shutil.which", return_value=None):  # no fzf
+                rc = cli.main(args)
+        finally:
+            os.chdir(old)
+        return rc, out.getvalue(), err.getvalue()
+
+    def setUp(self):
+        super().setUp()
+        self.empty()
+
+    def empty(self):
+        os.remove(saved_locations.list_file(self.home))
+        os.remove(self.p(".sdirs"))  # no "e" bashmark dir either
+
+    def listed(self):
+        return saved_locations.load()
+
+    # scan
+
+    def test_scan_creates_list_and_adds_chosen(self):
+        rc, out, err = self.run_in(["scan"], "1 3\n")
+        self.assertEqual((rc, out), (0, ""))
+        # every Everything dir in the fake home, sorted; none saved yet
+        self.assertIn("  1) ~/Archive/old_everything\n", err)
+        found = discovery.drop_duplicate_links(
+            discovery.find_everything_dirs(self.home, self.home, links=True))
+        self.assertEqual(self.listed(), [found[0], found[2]])
+        self.assertIn("added 2 dirs", err)
+        self.assertIn("created ~/.config/dotfiles/system_local/everything-dirs", err)
+
+    def test_scan_all_and_none(self):
+        found = discovery.drop_duplicate_links(
+            discovery.find_everything_dirs(self.home, self.home, links=True))
+        self.run_in(["scan"], "\n")
+        self.assertEqual(self.listed(), [])  # nothing chosen, but the file exists
+        self.run_in(["scan"], "all\n")
+        self.assertEqual(self.listed(), found)
+
+    def test_scan_shows_saved_dirs_and_only_adds_new_ones(self):
+        saved_locations.add(self.p("Main", "Everything"))
+        rc, _, err = self.run_in(["scan"], "all\n")
+        self.assertIn("~/Main/Everything  (saved)\n", err)
+        self.assertEqual(self.listed().count(self.p("Main", "Everything")), 1)
+        rc, _, err = self.run_in(["scan"])  # now everything is saved
+        self.assertEqual(rc, 0)
+        self.assertIn("all already saved", err)
+
+    def test_scan_root_and_errors(self):
+        rc, _, err = self.run_in(["scan", "--root", self.p("nope")])
+        self.assertEqual((rc, err), (1, f"everything scan: not a dir: {self.p('nope')}\n"))
+        rc, _, err = self.run_in(["scan", "--root", self.p("Archive")], "1\n")
+        self.assertEqual(self.listed(), [self.p("Archive", "old_everything")])
+        rc, _, err = self.run_in(["scan", "--root", self.p("elsewhere")])
+        self.assertEqual(rc, 1)
+        self.assertIn("no Everything dirs under ~/elsewhere", err)
+
+    def test_scan_bad_answer_adds_nothing(self):
+        rc, _, err = self.run_in(["scan"], "99\n")
+        self.assertEqual(self.listed(), [])
+        self.assertIn("'99' is not one of 1-", err)
+
+    def test_scan_fzf_multi_select(self):
+        rows = []
+
+        def fake_fzf(cmd, input, **kw):
+            rows.extend(input.splitlines())
+            self.assertIn("--multi", cmd)
+            return subprocess.CompletedProcess(cmd, 0, stdout=rows[0] + "\n" + rows[1] + "\n")
+        with mock.patch("shutil.which", return_value="/usr/bin/fzf"), \
+                mock.patch("subprocess.run", side_effect=fake_fzf):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                self.assertEqual(cli.main(["scan"]), 0)
+        self.assertEqual(self.listed(), [r.split("\t")[1] for r in rows[:2]])
+
+    # locations
+
+    def test_locations(self):
+        saved_locations.add(self.p("Archive", "old_everything"))
+        saved_locations.add(self.p("gone"))
+        rc, out, _ = self.run_in(["locations"])
+        self.assertEqual((rc, out), (0, "~/Archive/old_everything\n~/gone  (missing)\n"))
+
+    def test_locations_flags_unsaved_bookmark(self):
+        with open(self.p(".sdirs"), "w") as f:
+            f.write('export DIR_e="$HOME/Main/Everything"\n')
+        saved_locations.add(self.p("Archive", "old_everything"))
+        _, out, _ = self.run_in(["locations"])
+        self.assertEqual(out.splitlines(), [
+            "~/Archive/old_everything",
+            "~/Main/Everything  (bashmark 'e', searched too, not in the list)"])
+        saved_locations.add(self.p("Main", "Everything"))
+        _, out, _ = self.run_in(["locations"])
+        self.assertNotIn("bashmark", out)
+
+    def test_locations_never_set_up(self):
+        rc, out, err = self.run_in(["locations"])
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("run `everything scan` or `everything mark`", err)
+
+    # mark
+
+    def test_mark_everything_named_dir_needs_no_question(self):
+        rc, out, err = self.run_in(["mark", self.p("Archive", "old_everything")])
+        self.assertEqual((rc, out), (0, ""))
+        self.assertEqual(err, "everything mark: added ~/Archive/old_everything\n")
+        self.assertEqual(self.listed(), [self.p("Archive", "old_everything")])
+
+    def test_mark_current_dir_by_default_and_dir_with_entries(self):
+        d = self.p("Work", "notes")
+        os.makedirs(os.path.join(d, "260001-x"))
+        rc, _, _ = self.run_in(["mark"], cwd=d)
+        self.assertEqual((rc, self.listed()), (0, [d]))
+
+    def test_mark_twice_is_a_noop(self):
+        self.run_in(["mark", self.p("Archive", "old_everything")])
+        rc, _, err = self.run_in(["mark", self.p("Archive", "old_everything")])
+        self.assertEqual(rc, 0)
+        self.assertIn("is already in the list", err)
+        self.assertEqual(self.listed().count(self.p("Archive", "old_everything")), 1)
+
+    def test_mark_odd_dir_asks_and_says_why(self):
+        d = self.p("Work", "plain")
+        os.makedirs(d)
+        rc, _, err = self.run_in(["mark", d], "n\n", tty=True)
+        self.assertEqual(rc, 1)
+        self.assertIn("doesn't look like an Everything dir: its name doesn't contain "
+                      "\"everything\" and it holds no <yy><seq>[-suffix] entry dirs", err)
+        self.assertIn("not marked", err)
+        self.assertIsNone(self.listed())
+        rc, _, _ = self.run_in(["mark", d], "y\n", tty=True)
+        self.assertEqual((rc, self.listed()), (0, [d]))
+
+    def test_mark_odd_dir_without_tty_needs_yes(self):
+        d = self.p("Work", "plain")
+        os.makedirs(d)
+        rc, _, err = self.run_in(["mark", d], "y\n")
+        self.assertEqual(rc, 1)
+        self.assertIn("no terminal to ask on, refusing (use --yes)", err)
+        self.assertIsNone(self.listed())
+        rc, _, _ = self.run_in(["mark", "--yes", d])
+        self.assertEqual((rc, self.listed()), (0, [d]))
+
+    def test_mark_not_a_dir(self):
+        rc, _, err = self.run_in(["mark", self.p("nope")])
+        self.assertEqual((rc, err), (1, f"everything mark: not a dir: {self.p('nope')}\n"))
+
+    def test_mark_makes_everything_commands_work(self):
+        rc, _, err = self.run_in(["list"])
+        self.assertEqual(rc, 1)
+        self.run_in(["mark", self.p("Archive", "old_everything")])
+        rc, out, _ = self.run_in(["list", "--paths"])
+        self.assertEqual((rc, out), (0, self.p("Archive", "old_everything") + "\n"))
+
+    # unmark
+
+    def fill(self):
+        for d in ("Archive/old_everything", "Main/Everything", "Main/Everything/250001/sub-everything"):
+            saved_locations.add(self.p(*d.split("/")))
+
+    def test_unmark_single_match_confirms(self):
+        self.fill()
+        rc, _, err = self.run_in(["unmark", "archive"], "y\n", tty=True)
+        self.assertEqual(rc, 0)
+        self.assertIn("Remove ~/Archive/old_everything from the list? [y/N] ", err)
+        self.assertEqual(self.listed(), [self.p("Main", "Everything"),
+                                         self.p("Main", "Everything", "250001", "sub-everything")])
+
+    def test_unmark_declined_or_no_tty_keeps_it(self):
+        self.fill()
+        for stdin, tty in (("n\n", True), ("\n", True), ("y\n", False)):
+            rc, _, err = self.run_in(["unmark", "archive"], stdin, tty=tty)
+            self.assertEqual(rc, 1)
+            self.assertIn("not removed", err)
+        self.assertEqual(len(self.listed()), 3)
+
+    def test_unmark_several_matches_picks_then_confirms(self):
+        self.fill()
+        rc, _, err = self.run_in(["unmark", "main"], "2\ny\n", tty=True)
+        self.assertEqual(rc, 0)
+        self.assertIn("  1) ~/Main/Everything\n  2) ~/Main/Everything/250001/sub-everything\n", err)
+        self.assertEqual(self.listed(), [self.p("Archive", "old_everything"),
+                                         self.p("Main", "Everything")])
+
+    def test_unmark_without_text_picks_from_all(self):
+        self.fill()
+        rc, _, _ = self.run_in(["unmark"], "1\ny\n", tty=True)
+        self.assertEqual(rc, 0)
+        self.assertNotIn(self.p("Archive", "old_everything"), self.listed())
+
+    def test_unmark_no_selection_and_no_match(self):
+        self.fill()
+        rc, _, err = self.run_in(["unmark"], "\n", tty=True)
+        self.assertEqual(rc, 1)
+        self.assertIn("no selection made", err)
+        rc, _, err = self.run_in(["unmark", "zzz"], "y\n", tty=True)
+        self.assertEqual(rc, 1)
+        self.assertIn("no Everything dir matching 'zzz'", err)
+        self.assertEqual(len(self.listed()), 3)
+
+    def test_unmark_fzf_picker(self):
+        self.fill()
+
+        def fake_fzf(cmd, input, **kw):
+            line = next(l for l in input.splitlines() if l.endswith("sub-everything"))
+            return subprocess.CompletedProcess(cmd, 0, stdout=line + "\n")
+        with mock.patch("shutil.which", return_value="/usr/bin/fzf"), \
+                mock.patch("subprocess.run", side_effect=fake_fzf), \
+                mock.patch.object(sys, "stdin", Tty("y\n")), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["unmark"]), 0)
+        self.assertEqual(len(self.listed()), 2)
+
+    def test_unmark_never_set_up(self):
+        rc, _, err = self.run_in(["unmark"], "y\n", tty=True)
+        self.assertEqual(rc, 1)
+        self.assertIn("run `everything scan` or `everything mark`", err)
+
+
 class HelpCommandTest(unittest.TestCase):
     def overview_names(self, group):
         return [name for name, _, _ in cli.OVERVIEW[group][1]]
@@ -1318,7 +1591,7 @@ class HelpCommandTest(unittest.TestCase):
 
 
 class LinkOnlyDirsTest(TreeTest):
-    """Everything dirs reachable under --root only via a symlink (ticket 019)."""
+    """Saved symlinked Everything dirs count once per real dir (tickets 019, 024)."""
     run_cli = ListCommandTest.run_cli
 
     def setUp(self):
@@ -1332,6 +1605,10 @@ class LinkOnlyDirsTest(TreeTest):
         os.symlink(self.ext, self.link)
         os.symlink(self.ext, self.p("Main", "zz-second-everything"))  # same target again
         os.symlink(self.p("Main", "Everything"), self.p("Main", "dup-everything"))  # found directly
+        self.save(self.p("Main", "Everything"),
+                  self.p("Main", "Everything", "250001", "sub-everything"),
+                  self.link, self.p("Main", "zz-second-everything"),
+                  self.p("Main", "dup-everything"))
 
     def test_drop_duplicate_links(self):
         dirs = discovery.find_everything_dirs(self.root, self.home, links=True)
@@ -1342,40 +1619,42 @@ class LinkOnlyDirsTest(TreeTest):
         ])
 
     def test_goto_all_finds_entry_via_link(self):
-        rc, out, err = self.run_cli("goto", "--all", "--root", self.root, "50", "26")
+        rc, out, err = self.run_cli("goto", "--all", "50", "26")
         self.assertEqual((rc, out), (0, os.path.join(self.link, "260050-ext") + "\n"))
         self.assertEqual(err, "everything goto: 260050-ext_external_note_@ai  ~/Main/ext-everything\n")
 
     def test_goto_all_no_duplicates_via_link_to_found_dir(self):
         # 250002-nry is in ~/Main/Everything, also reachable as dup-everything
-        rc, out, _ = self.run_cli("goto", "--all", "--root", self.root, "2", "25")
+        rc, out, _ = self.run_cli("goto", "--all", "2", "25")
         self.assertEqual((rc, out), (0, self.p("Main", "Everything", "250002-nry") + "\n"))
 
     def test_entries_all(self):
-        rc, out, _ = self.run_cli("entries", "--all", "--root", self.root)
+        rc, out, _ = self.run_cli("entries", "--all")
         self.assertEqual(rc, 0)
         self.assertIn("(8 entries in 3 dirs)", out)
         self.assertEqual(out.count("260050-ext"), 1)
         self.assertIn("~/Main/ext-everything", out)
 
     def test_stats_and_check_count_link_once(self):
-        _, out, _ = self.run_cli("stats", "--json", "--root", self.root)
+        _, out, _ = self.run_cli("stats", "--json")
         data = json.loads(out)
         self.assertEqual(data["entries"], 8)
-        _, out, _ = self.run_cli("check", "--json", "--root", self.root)
+        _, out, _ = self.run_cli("check", "--json")
         self.assertEqual([d["dir"] for d in json.loads(out)["dirs"]], [
             self.p("Main", "Everything"),
             self.p("Main", "Everything", "250001", "sub-everything"),
             self.link,
         ])
 
-    def test_help_documents_links(self):
-        for cmd in ["goto", "entries", "stats", "check"]:
+    def test_help_documents_the_saved_list(self):
+        for cmd in ["goto", "entries", "stats", "check", "pick"]:
             out = io.StringIO()
             with contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
                 cli.main([cmd, "--help"])
-            self.assertIn("only if its target isn't found directly",
-                          " ".join(out.getvalue().split()), cmd)
+            text = " ".join(out.getvalue().split())
+            self.assertIn("saved list of Everything dirs", text, cmd)
+            for gone in ("--root", "--fresh", "--network"):
+                self.assertNotIn(gone, text, cmd)
 
 
 if __name__ == "__main__":

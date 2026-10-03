@@ -8,48 +8,32 @@ import subprocess
 import sys
 from collections import Counter
 
-from . import check, discovery, entries, goto, new, stats
+from . import check, discovery, entries, goto, new, prompt, saved_locations, stats
 
 
 def _tilde(path: str, home: str) -> str:
     return "~" + path[len(home):] if path == home or path.startswith(home + "/") else path
 
 
-def _age(seconds: float) -> str:
-    minutes = int(seconds // 60)
-    if minutes < 1:
-        return "<1 min"
-    if minutes < 60:
-        return f"{minutes} min"
-    return f"{minutes // 60} h {minutes % 60} min"
+def _saved_dirs(prog: str) -> list[str] | None:
+    """The saved Everything dirs (plus the "e" bashmark dir), or None after an error message.
 
-
-def _discover(args: argparse.Namespace, prog: str,
-              links: bool = False) -> tuple[str, list[str]] | None:
-    """Resolve --root and find its Everything dirs; print an error and return None if none.
-
-    With `links` (list, pick) every symlinked Everything dir is included.
-    Otherwise (goto --all, entries --all, stats, check) a link is only included
-    if its target isn't found directly or via an earlier link, so each dir is
-    searched and counted once.
+    Saved dirs that no longer exist are skipped with a warning; no list yet is an error.
     """
     home = os.path.expanduser("~")
-    if not os.path.isdir(args.root):
-        print(f"{prog}: not a dir: {args.root}", file=sys.stderr)
+    try:
+        found = saved_locations.all_dirs()
+    except saved_locations.NotSetUp as e:
+        print(f"{prog}: no list of Everything dirs yet - {e}", file=sys.stderr)
         return None
-    root = os.path.realpath(args.root)
-    dirs, age = discovery.find_everything_dirs_cached(root, home, fresh=args.fresh,
-                                                     network=args.network, links=True)
-    if not links:
-        dirs = discovery.drop_duplicate_links(dirs)
-    if age is not None:
-        print(f"{prog}: using cached Everything-dir list ({_age(age)} old; "
-              "--fresh to re-search)", file=sys.stderr)
-    if not dirs:
-        print(f"{prog}: no Everything dirs under {_tilde(root, home)} (try --root <path>)",
+    for d in found.missing:
+        print(f"{prog}: warning: saved dir {_tilde(d, home)} no longer exists, skipping",
               file=sys.stderr)
+    if not found.dirs:
+        print(f"{prog}: no Everything dirs in the list - add some with `everything scan` "
+              "or `everything mark`", file=sys.stderr)
         return None
-    return root, dirs
+    return found.dirs
 
 
 def _table(dirs: list[str], home: str, bookmark: str | None) -> tuple[str, list[str], int]:
@@ -73,7 +57,7 @@ def _table(dirs: list[str], home: str, bookmark: str | None) -> tuple[str, list[
             display += " → " + (_tilde(target, home) if target != home else target)
         if depth:
             display = " " * (depth * 2) + "└ " + display
-        display = ("* " if d == bookmark else "  ") + display
+        display = ("* " if bookmark and os.path.realpath(d) == bookmark else "  ") + display
         rows.append((display, len(found), newest, ",".join(suffixes) or "-"))
 
     width = max([4] + [len(r[0]) for r in rows])
@@ -85,26 +69,24 @@ def _table(dirs: list[str], home: str, bookmark: str | None) -> tuple[str, list[
 
 def cmd_list(args: argparse.Namespace) -> int:
     """List every Everything dir with entry count, newest entry and suffixes."""
-    found = _discover(args, "everything list", links=True)
-    if found is None:
+    dirs = _saved_dirs("everything list")
+    if dirs is None:
         return 1
-    root, dirs = found
     if args.paths:
-        # bare paths are for scripts, which would otherwise see a linked dir twice
-        print("\n".join(d for d in dirs if not discovery.is_link(d)))
+        print("\n".join(dirs))
         return 0
 
     home = os.path.expanduser("~")
     bookmark = discovery.bookmark_dir()
     header, lines, nested = _table(dirs, home, bookmark)
     links = sum(map(discovery.is_link, dirs))
-    counts = f"{len(dirs)} found, {nested} nested" + (f", {_plural(links, 'symlink')}"
+    counts = f"{_plural(len(dirs), 'dir')}, {nested} nested" + (f", {_plural(links, 'symlink')}"
                                                         if links else "")
-    print(f"Everything dirs under {_tilde(root, home)} ({counts})")
+    print(f"Saved Everything dirs ({counts})")
     print()
     print(header)
     print("\n".join(lines))
-    if bookmark in dirs:
+    if bookmark and any(os.path.realpath(d) == bookmark for d in dirs):
         print()
         print("* = bashmark 'e' (used by ge)")
     return 0
@@ -119,10 +101,9 @@ def _matching(dirs: list[str], text: str | None) -> list[str]:
 def cmd_pick(args: argparse.Namespace) -> int:
     """Print one Everything dir, matched by text and/or picked with fzf."""
     prog = "everything pick"
-    found = _discover(args, prog, links=True)
-    if found is None:
+    dirs = _saved_dirs(prog)
+    if dirs is None:
         return 1
-    _, dirs = found
 
     matches = _matching(dirs, args.text)
     if not matches:
@@ -164,10 +145,9 @@ def cmd_goto(args: argparse.Namespace) -> int:
     prog = args.label
     home = os.path.expanduser("~")
     if args.all:
-        found = _discover(args, prog)
-        if found is None:
+        bases = _saved_dirs(prog)
+        if bases is None:
             return 1
-        bases = found[1]
     elif args.dir:
         if not os.path.isdir(args.dir):
             print(f"{prog}: not a dir: {args.dir}", file=sys.stderr)
@@ -255,13 +235,12 @@ def cmd_entries(args: argparse.Namespace) -> int:
     prog = "everything entries"
     home = os.path.expanduser("~")
     if args.all:
-        found = _discover(args, prog)
-        if found is None:
+        dirs = _saved_dirs(prog)
+        if dirs is None:
             return 1
-        root, dirs = found
-        title = f"Entries of every Everything dir under {_tilde(root, home)}"
+        title = "Entries of every saved Everything dir"
     else:
-        d = discovery.enclosing_everything_dir(os.getcwd())
+        d = discovery.enclosing_everything_dir(os.getcwd(), saved_locations.load())
         if d is None:
             print(f"{prog}: not inside an Everything dir (cd into one, or use --all)",
                   file=sys.stderr)
@@ -363,10 +342,9 @@ def _render_stats(st: stats.Stats, title: str) -> list[str]:
 def cmd_stats(args: argparse.Namespace) -> int:
     """Counts, id ranges per suffix and tag usage across Everything dirs."""
     prog = "everything stats"
-    found = _discover(args, prog)
-    if found is None:
+    dirs = _saved_dirs(prog)
+    if dirs is None:
         return 1
-    root, dirs = found
     dirs = _matching(dirs, args.dir)
     if not dirs:
         print(f"{prog}: no Everything dir matching '{args.dir}'", file=sys.stderr)
@@ -376,7 +354,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
     if args.per_dir:
         results = [(f"Everything stats for {_tilde(d, home)}", stats.collect([d])) for d in dirs]
     else:
-        title = f"Everything stats under {_tilde(root, home)}"
+        title = "Everything stats for the saved dirs"
         if args.dir:
             title += f" matching '{args.dir}'"
         results = [(title, stats.collect(dirs))]
@@ -393,10 +371,9 @@ def cmd_stats(args: argparse.Namespace) -> int:
 def cmd_check(args: argparse.Namespace) -> int:
     """Report naming problems in Everything dirs; exit 1 if any are shown."""
     prog = "everything check"
-    found = _discover(args, prog)
-    if found is None:
+    dirs = _saved_dirs(prog)
+    if dirs is None:
         return 1
-    root, dirs = found
     dirs = _matching(dirs, args.dir)
     if not dirs:
         print(f"{prog}: no Everything dir matching '{args.dir}'", file=sys.stderr)
@@ -438,7 +415,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     summary = f"{_plural(len(dirs), 'Everything dir')} checked"
     if args.dir:
         summary += f" (matching '{args.dir}')"
-    summary += f" under {_tilde(root, home)}: "
+    summary += ": "
     summary += ", ".join(f"{counts[s]} {s}" for s in levels)
     summary += f"; {clean} clean"
     if hidden:
@@ -492,6 +469,127 @@ def cmd_new(args: argparse.Namespace) -> int:
     return 0
 
 
+def _looks_like_everything(d: str) -> str | None:
+    """None if `d` looks like an Everything dir, else why it doesn't."""
+    if discovery.is_everything_name(os.path.basename(os.path.realpath(d))) \
+            or discovery.is_everything_name(os.path.basename(d)):
+        return None
+    if entries.list_entries(d):
+        return None
+    return ("its name doesn't contain \"everything\" and it holds no "
+            "<yy><seq>[-suffix] entry dirs")
+
+
+def _current_dir() -> str:
+    """The cwd, as $PWD names it when that is the same dir (keeps symlink names)."""
+    cwd, pwd = os.getcwd(), os.environ.get("PWD", "")
+    return pwd if pwd and os.path.realpath(pwd) == os.path.realpath(cwd) else cwd
+
+
+def cmd_scan(args: argparse.Namespace) -> int:
+    """Search the disk for Everything dirs and add the chosen ones to the saved list."""
+    prog = "everything scan"
+    home = os.path.expanduser("~")
+    if not os.path.isdir(args.root):
+        print(f"{prog}: not a dir: {args.root}", file=sys.stderr)
+        return 1
+    root = os.path.realpath(args.root)
+    print(f"{prog}: searching {_tilde(root, home)} ...", file=sys.stderr)
+    dirs = discovery.drop_duplicate_links(
+        discovery.find_everything_dirs(root, home, network=args.network, links=True))
+    if saved_locations.create():
+        print(f"{prog}: created {_tilde(saved_locations.list_file(), home)}", file=sys.stderr)
+    if not dirs:
+        print(f"{prog}: no Everything dirs under {_tilde(root, home)} (try --root <path>)",
+              file=sys.stderr)
+        return 1
+    new_dirs = [d for d in dirs if not saved_locations.contains(d)]
+    if not new_dirs:
+        print(f"{prog}: found {_plural(len(dirs), 'dir')}, all already saved", file=sys.stderr)
+        return 0
+    items = [(_tilde(d, home) + ("  (saved)" if d not in new_dirs else ""), d) for d in dirs]
+    chosen = [d for d in prompt.choose(prog, items, "add which dirs?", multi=True)
+              if d in new_dirs]
+    for d in chosen:
+        saved_locations.add(d)
+    print(f"{prog}: added {_plural(len(chosen), 'dir')} "
+          f"({len(new_dirs) - len(chosen)} found but not added)", file=sys.stderr)
+    return 0
+
+
+def cmd_locations(args: argparse.Namespace) -> int:
+    """Print the saved Everything dirs, flagging missing ones."""
+    prog = "everything locations"
+    home = os.path.expanduser("~")
+    saved = saved_locations.load()
+    if saved is None:
+        print(f"{prog}: no list of Everything dirs yet - {saved_locations.HINT}",
+              file=sys.stderr)
+        return 1
+    for d in saved:
+        print(_tilde(d, home) + ("" if os.path.isdir(d) else "  (missing)"))
+    bookmark = discovery.bookmark_dir()
+    if bookmark and not saved_locations.contains(bookmark):
+        print(f"{_tilde(bookmark, home)}  (bashmark 'e', searched too, not in the list)")
+    if not saved:
+        print(f"{prog}: the list is empty", file=sys.stderr)
+    return 0
+
+
+def cmd_mark(args: argparse.Namespace) -> int:
+    """Add a dir (default: the current one) to the saved list."""
+    prog = "everything mark"
+    home = os.path.expanduser("~")
+    d = os.path.abspath(os.path.expanduser(args.dir)) if args.dir else _current_dir()
+    if not os.path.isdir(d):
+        print(f"{prog}: not a dir: {args.dir}", file=sys.stderr)
+        return 1
+    if saved_locations.contains(d):
+        saved_locations.create()
+        print(f"{prog}: {_tilde(d, home)} is already in the list", file=sys.stderr)
+        return 0
+    why = _looks_like_everything(d)
+    if why and not prompt.confirm(
+            prog, f"{_tilde(d, home)} doesn't look like an Everything dir: {why}. Mark it anyway?",
+            args.yes, hint=" (use --yes)"):
+        print(f"{prog}: not marked", file=sys.stderr)
+        return 1
+    saved_locations.add(d)
+    print(f"{prog}: added {_tilde(d, home)}", file=sys.stderr)
+    return 0
+
+
+def cmd_unmark(args: argparse.Namespace) -> int:
+    """Remove one dir from the saved list, after confirming."""
+    prog = "everything unmark"
+    home = os.path.expanduser("~")
+    saved = saved_locations.load()
+    if saved is None:
+        print(f"{prog}: no list of Everything dirs yet - {saved_locations.HINT}",
+              file=sys.stderr)
+        return 1
+    matches = _matching(saved, args.text)
+    if not matches:
+        what = f"matching '{args.text}'" if args.text else "saved"
+        print(f"{prog}: no Everything dir {what}", file=sys.stderr)
+        return 1
+    if len(matches) == 1:
+        target = matches[0]
+    else:
+        title = f"several match '{args.text}', remove which?" if args.text else "remove which?"
+        picked = prompt.choose(prog, [(_tilde(d, home), d) for d in matches], title)
+        if not picked:
+            print(f"{prog}: no selection made, refusing", file=sys.stderr)
+            return 1
+        target = picked[0]
+    if not prompt.confirm(prog, f"Remove {_tilde(target, home)} from the list?"):
+        print(f"{prog}: not removed", file=sys.stderr)
+        return 1
+    saved_locations.remove(target)
+    print(f"{prog}: removed {_tilde(target, home)}", file=sys.stderr)
+    return 0
+
+
 # Hand-written on purpose (ticket 020); a test fails if a subcommand or an
 # Everything wrapper in functions.d/aliases.d is missing here.
 # (group title, [(name, one-line description, example), ...])
@@ -511,6 +609,12 @@ OVERVIEW = [
          "everything check --all-levels"),
         ("new", "create the next entry dir + sidecar and print its path",
          "everything new \"some idea\" ai"),
+        ("scan", "search the disk for Everything dirs and pick which to save",
+         "everything scan --root ~/Main"),
+        ("locations", "print the saved Everything dirs", "everything locations"),
+        ("mark", "save the current (or given) dir as an Everything dir",
+         "everything mark ~/Main/Archive"),
+        ("unmark", "remove a dir from the saved list, after asking", "everything unmark archive"),
         ("help", "this overview", "everything help"),
     ]),
     ("Shell functions and aliases (functions.d / aliases.d)", [
@@ -539,13 +643,13 @@ def cmd_help(args: argparse.Namespace) -> int:
     return 0
 
 
-# searched when --root isn't given (tests point this at a fake tree)
+# where `scan` searches when --root isn't given (tests point this at a fake tree)
 DEFAULT_ROOT = "/"
 NETWORK_HELP = ("also search network filesystems (nfs, cifs, sshfs, ...); local mounts are "
                 "always searched")
-LINKS_NOTE = ("A symlink named like an Everything dir is included (as the link path) only "
-              "if its target isn't found directly, so each dir counts once; links are "
-              "never followed while searching.")
+LIST_NOTE = ("Searches the saved list of Everything dirs plus the \"e\" bashmark dir, each "
+             "real dir once (`everything locations` shows it, `scan`/`mark`/`unmark` "
+             "change it); never walks the disk.")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -554,22 +658,16 @@ def build_parser() -> argparse.ArgumentParser:
                                      "and aliases built on it (ge, cde, ...).")
     sub = parser.add_subparsers(dest="command", required=True, metavar="<command>")
 
-    p = sub.add_parser("list", help="list every Everything dir (cde picks one)",
-                       description="List every Everything or Everything-like dir (name "
-                       "contains \"everything\", any case) with its \"<yy><seq>[-suffix]\" "
-                       "entry count, newest entry and suffixes. Dirs nested in another "
-                       "listed dir are indented; \"*\" marks the \"e\" bashmark used by ge. "
-                       "Symlinks named like an Everything dir show as \"link → target\"; "
-                       "they are never followed, and broken ones are left out. Read-only.")
-    p.add_argument("--root", default=DEFAULT_ROOT,
-                   help="where to search (default: /)")
-    p.add_argument("--network", action="store_true", help=NETWORK_HELP)
-    p.add_argument("--fresh", action="store_true",
-                   help="ignore the cached Everything-dir list (up to 6 h old) and search again "
-                        "(no-op while the cache is disabled)")
+    p = sub.add_parser("list", help="list every saved Everything dir (cde picks one)",
+                       description="List the saved Everything dirs (and the \"e\" bashmark "
+                       "dir) with their \"<yy><seq>[-suffix]\" entry count, newest entry and "
+                       "suffixes. Dirs nested in another listed dir are indented; \"*\" marks "
+                       "the \"e\" bashmark used by ge. Symlinked dirs show as "
+                       "\"link → target\". Saved dirs that no longer exist are skipped with a "
+                       "warning. Fails if no list exists yet (see `everything scan`/`mark`). "
+                       "Read-only.")
     p.add_argument("--paths", action="store_true",
-                   help="print bare absolute paths only, one per line (for scripting); "
-                        "symlinked Everything dirs are left out")
+                   help="print bare paths only, one per line (for scripting)")
     p.set_defaults(func=cmd_list)
 
     p = sub.add_parser("entries", help="list the entries of the Everything dir you're in "
@@ -581,33 +679,20 @@ def build_parser() -> argparse.ArgumentParser:
                        "Sorted by id, then name. Entries without a sidecar get an empty "
                        "description. Read-only.")
     p.add_argument("-a", "--all", action="store_true",
-                   help="list the entries of every Everything dir under --root, with an "
-                        "extra column naming the dir; works from anywhere. " + LINKS_NOTE)
+                   help="list the entries of every saved Everything dir, with an "
+                        "extra column naming the dir; works from anywhere. " + LIST_NOTE)
     p.add_argument("--size", action="store_true",
                    help="add each entry's recursive size (symlinks not followed) and sort by "
                         "it, largest first")
-    p.add_argument("--root", default=DEFAULT_ROOT,
-                   help="where --all searches for Everything dirs (default: /)")
-    p.add_argument("--network", action="store_true", help=NETWORK_HELP)
-    p.add_argument("--fresh", action="store_true",
-                   help="with --all, ignore the cached Everything-dir list (no-op while the "
-                        "cache is disabled)")
     p.set_defaults(func=cmd_entries)
 
     p = sub.add_parser("pick", help="print one Everything dir, via text match or fzf (used by cde)",
                        description="Print the absolute path of one Everything dir. Without "
                        "TEXT, consider all of them; with TEXT, only dirs whose path "
                        "contains it (any case). A single candidate is printed directly, "
-                       "several are offered in fzf. Symlinked Everything dirs are offered "
-                       "too and printed as the link path. Read-only; cde wraps this to cd "
-                       "there.")
+                       "several are offered in fzf. Symlinked dirs are printed as the link "
+                       "path. " + LIST_NOTE + " Read-only; cde wraps this to cd there.")
     p.add_argument("text", nargs="?", help="case-insensitive substring of the path")
-    p.add_argument("--root", default=DEFAULT_ROOT,
-                   help="where to search (default: /)")
-    p.add_argument("--network", action="store_true", help=NETWORK_HELP)
-    p.add_argument("--fresh", action="store_true",
-                   help="ignore the cached Everything-dir list (up to 6 h old) and search again "
-                        "(no-op while the cache is disabled)")
     p.set_defaults(func=cmd_pick)
 
     p = sub.add_parser("goto", help="print one entry dir, by id or sidecar text (used by ge/gel)",
@@ -621,15 +706,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("year", nargs="?", help="year of a numeric id, e.g. 25 or 2025")
     scope = p.add_mutually_exclusive_group()
     scope.add_argument("-a", "--all", action="store_true",
-                       help="search every Everything dir under --root, not just the "
-                            "bashmark. " + LINKS_NOTE)
+                       help="search every saved Everything dir, not just the "
+                            "bashmark. " + LIST_NOTE)
     scope.add_argument("--dir", help="search this dir instead of the bashmark (used by gel)")
-    p.add_argument("--root", default=DEFAULT_ROOT,
-                   help="where --all searches for Everything dirs (default: /)")
-    p.add_argument("--network", action="store_true", help=NETWORK_HELP)
-    p.add_argument("--fresh", action="store_true",
-                   help="with --all, ignore the cached Everything-dir list (no-op while the "
-                        "cache is disabled)")
     p.add_argument("--label", default="everything goto", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_goto)
 
@@ -639,13 +718,7 @@ def build_parser() -> argparse.ArgumentParser:
                        "entry counts (total, distinct ids, per year), entries and id range per "
                        "suffix (split by year, since seq restarts every year) and tag usage. "
                        "One combined total by default. Read-only; problems such as missing "
-                       "sidecars are left to the checker. " + LINKS_NOTE)
-    p.add_argument("--root", default=DEFAULT_ROOT,
-                   help="where to search (default: /)")
-    p.add_argument("--network", action="store_true", help=NETWORK_HELP)
-    p.add_argument("--fresh", action="store_true",
-                   help="ignore the cached Everything-dir list (up to 6 h old) and search again "
-                        "(no-op while the cache is disabled)")
+                       "sidecars are left to the checker. " + LIST_NOTE)
     p.add_argument("--dir", metavar="TEXT",
                    help="only Everything dirs whose path contains TEXT (any case), as in pick")
     p.add_argument("--per-dir", action="store_true",
@@ -662,13 +735,7 @@ def build_parser() -> argparse.ArgumentParser:
                        "must be such a sidecar with exactly one dir. Problems are major or "
                        "medium; minor slips (no tags, a tag without \"@\", tags differing "
                        "only in case, ...) only show with --all-levels. Exits 1 if anything "
-                       "is shown. Read-only. " + LINKS_NOTE)
-    p.add_argument("--root", default=DEFAULT_ROOT,
-                   help="where to search (default: /)")
-    p.add_argument("--network", action="store_true", help=NETWORK_HELP)
-    p.add_argument("--fresh", action="store_true",
-                   help="ignore the cached Everything-dir list (up to 6 h old) and search again "
-                        "(no-op while the cache is disabled)")
+                       "is shown. Read-only. " + LIST_NOTE)
     p.add_argument("--dir", metavar="TEXT",
                    help="only Everything dirs whose path contains TEXT (any case), as in pick")
     p.add_argument("--all-levels", action="store_true",
@@ -690,6 +757,42 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dir", default=".", help="the Everything dir (default: current dir)")
     p.add_argument("--label", default="everything new", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_new)
+
+    p = sub.add_parser("scan", help="search the disk for Everything dirs and save the chosen ones",
+                       description="The only command that walks the disk: find every dir "
+                       "whose name contains \"everything\" (any case) and ask which to add "
+                       "to the saved list (fzf multi-select if available, else a numbered "
+                       "prompt; dirs already saved are marked). Creates the list file if "
+                       "missing. The other commands only read the list.")
+    p.add_argument("--root", default=DEFAULT_ROOT, help="where to search (default: /)")
+    p.add_argument("--network", action="store_true", help=NETWORK_HELP)
+    p.set_defaults(func=cmd_scan)
+
+    p = sub.add_parser("locations", help="print the saved Everything dirs",
+                       description="Print the saved Everything dirs, one per line; ones that "
+                       "no longer exist are flagged, and so is the \"e\" bashmark dir if it "
+                       "isn't in the list (it is searched anyway). Read-only.")
+    p.set_defaults(func=cmd_locations)
+
+    p = sub.add_parser("mark", help="save the current (or given) dir as an Everything dir",
+                       description="Add DIR (default: the current dir) to the saved list, "
+                       "creating the list if needed. A dir that doesn't look Everything-like "
+                       "(no \"everything\" in its name and no <yy><seq>[-suffix] entries) "
+                       "is only added after confirming; without a terminal that is refused "
+                       "unless --yes. A marked dir counts as an Everything dir (also for "
+                       "`lse`); nested dirs need their own mark.")
+    p.add_argument("dir", nargs="?", help="the dir to mark (default: current dir)")
+    p.add_argument("--yes", action="store_true",
+                   help="don't ask about a dir that doesn't look Everything-like")
+    p.set_defaults(func=cmd_mark)
+
+    p = sub.add_parser("unmark", help="remove a dir from the saved list, after asking",
+                       description="Remove one dir from the saved list. TEXT matches the saved "
+                       "paths (case-insensitive substring; without it all are candidates); "
+                       "several matches are offered in fzf or a numbered prompt. Always asks "
+                       "before removing, so it refuses without a terminal.")
+    p.add_argument("text", nargs="?", help="case-insensitive substring of the saved path")
+    p.set_defaults(func=cmd_unmark)
 
     p = sub.add_parser("help", help="overview of every Everything-dir command, incl. shell "
                        "wrappers", description="Print a short overview of the `everything` "
