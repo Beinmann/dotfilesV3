@@ -1,9 +1,6 @@
 # Entry point for interactive bash, sourced from the managed block that
 # init_or_deinit_stow.py appends to ~/.bashrc.
 
-export EDITOR=vim
-export VISUAL=vim
-
 # If not running interactively, don't do anything
 case $- in
     *i*) ;;

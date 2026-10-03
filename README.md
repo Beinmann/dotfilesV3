@@ -59,10 +59,10 @@ glob. Once conflicts are resolved it runs the real stow setup for you.
 If you'd rather do it by hand:
 
 **Resolve conflicts first.** Stow creates symlinks from this repo into your
-home directory. If files like `~/.bashrc` or `~/.profile` already exist, stow
+home directory. If files like `~/.bash_profile` already exist, stow
 will refuse to overwrite them. You need to **remove or back up any
-conflicting files before stowing**. Common conflicts to check: `~/.bashrc`,
-`~/.bash_profile`, `~/.profile`.
+conflicting files before stowing**. Common conflicts to check: `~/.bash_profile`. (`~/.bashrc` and
+`~/.profile` are not stowed; init appends a marked block to each.)
 
 **Configure which modules to activate.** Copy the template module list and
 edit it for your machine:
