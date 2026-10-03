@@ -44,6 +44,16 @@ class DesktopSplitTest(unittest.TestCase):
                 with open(path, errors="ignore") as f:
                     self.assertIsNone(pattern.search(f.read()), path)
 
+    def test_claude_usage_alias_only_in_ai_and_only_one_spelling(self):
+        def read(module, name):
+            with open(os.path.join(MODULES, module, ".config/dotfiles/aliases.d", name)) as f:
+                return f.read()
+        ai = read("ai", "ai.sh")
+        self.assertIn("alias claude_usage=", ai)
+        self.assertNotIn("claudeUsage", ai)
+        for module, name in (("i3", "i3.sh"), ("base", "base.sh")):
+            self.assertNotIn("claude", read(module, name).lower())
+
     def test_i3_keeps_dirs_it_shares_non_folding(self):
         for d in ("~/.local/bin", "~/.local/share/applications",
                   "~/.config/dotfiles/aliases.d"):
