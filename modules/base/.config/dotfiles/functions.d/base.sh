@@ -259,6 +259,24 @@ mynew() {
 }
 
 
+# my(delete) for entries: delete the entry you're in plus its sidecar, after
+# showing what is in it and asking you to type its 4-digit sequence number.
+# Trash when gio/trash-put exists, else permanent (the prompt says which).
+# The work is done by `everything remove` (see ~/.local/bin/everything), which
+# prints the parent dir on success; this only does the cd, since the cwd is gone.
+#
+# Usage: myrm   (from inside an entry dir)
+myrm() {
+    local dir
+    dir=$(everything remove --label myrm "$@") || return
+    if [ -d "$dir" ]; then
+        cd -- "$dir"
+    else
+        printf '%s\n' "$dir"  # e.g. --help output
+    fi
+}
+
+
 # Shared tail for ge/gel: the matching (id or sidecar text, fzf on several
 # matches) is done by `everything goto` (see ~/.local/bin/everything); this
 # only does the cd, which a subprocess can't do for the shell.

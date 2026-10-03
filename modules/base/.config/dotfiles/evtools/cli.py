@@ -1,6 +1,7 @@
 """`everything` command: subcommands over all Everything dirs."""
 
 import argparse
+import datetime
 import json
 import os
 import shutil
@@ -8,7 +9,7 @@ import subprocess
 import sys
 from collections import Counter
 
-from . import check, discovery, entries, goto, new, prompt, rename, saved_locations, stats
+from . import check, discovery, entries, goto, info, new, prompt, remove, rename, saved_locations, stats
 
 
 def _tilde(path: str, home: str) -> str:
@@ -642,6 +643,52 @@ def cmd_rename(args: argparse.Namespace) -> int:
     return 0
 
 
+def _render_entry_info(ei: info.EntryInfo, home: str) -> list[str]:
+    """Lines summarising an entry for the remove confirmation."""
+    s = ei.sidecars[0] if ei.sidecars else None
+    newest = datetime.datetime.fromtimestamp(ei.newest).strftime("%Y-%m-%d %H:%M")
+    rows = [
+        ("Entry", ei.entry.name),
+        ("Sidecar", s.name if s else "(none)"),
+        ("Description", s.description if s else ""),
+        ("Tags", " ".join("@" + t for t in s.tags) if s else ""),
+        ("Size", f"{_human_size(ei.size)} ({_plural(ei.files, 'file')}, "
+                 f"{_plural(ei.dirs, 'dir')}, {_plural(ei.symlinks, 'symlink')})"),
+        ("Last changed", newest),
+        ("Location", _tilde(ei.path, home)),
+    ]
+    lines = [f"  {k + ':':<14}{v}" for k, v in rows]
+    lines += [f"  WARNING: {w}" for w in ei.warnings]
+    return lines
+
+
+def cmd_remove(args: argparse.Namespace) -> int:
+    """Delete the entry dir you're in plus its sidecar, after a typed confirmation."""
+    prog = args.label
+    home = os.path.expanduser("~")
+    try:
+        target = remove.find_entry(_current_dir())
+        ei = remove.check_deletable(target)
+        if not sys.stdin.isatty():
+            raise rename.Refusal("needs a terminal to ask on, refusing - nothing deleted")
+        method = remove.choose_method()
+        word = ei.entry.seq
+        print("\n".join(_render_entry_info(ei, home)), file=sys.stderr)
+        print(f"\n  >>> {method.banner} <<<\n", file=sys.stderr)
+        print(f"Type {word} to delete this entry and its sidecar (anything else aborts): ",
+              end="", file=sys.stderr, flush=True)
+        if sys.stdin.readline().strip() != word:
+            raise rename.Refusal("not confirmed - nothing deleted")
+        done = remove.delete(target, method)
+    except (rename.Refusal, OSError) as e:
+        print(f"{prog}: {e}", file=sys.stderr)
+        return 1
+    how = "moved to the trash" if method.trash else "deleted"
+    print(f"{prog}: {how}: {', '.join(done)}", file=sys.stderr)
+    print(os.path.dirname(target.entry_dir))  # for the shell wrapper to cd into
+    return 0
+
+
 # Hand-written on purpose (ticket 020); a test fails if a subcommand or an
 # Everything wrapper in functions.d/aliases.d is missing here.
 # (group title, [(name, one-line description, example), ...])
@@ -661,6 +708,8 @@ OVERVIEW = [
          "everything check --all-levels"),
         ("new", "create the next entry dir + sidecar and print its path",
          "everything new \"some idea\" ai"),
+        ("remove", "delete the entry you're in and its sidecar, after typing its sequence number",
+         "everything remove"),
         ("scan", "search the disk for Everything dirs and pick which to save",
          "everything scan --root ~/Main"),
         ("locations", "print the saved Everything dirs", "everything locations"),
@@ -677,6 +726,8 @@ OVERVIEW = [
         ("gel", "like ge, but searches the current dir", "gel fire"),
         ("cde", "cd to one Everything dir, via text match or fzf", "cde archive"),
         ("lse", "alias for `everything entries`", "lse -a"),
+        ("myrm", "delete the entry you're in + sidecar (trash if possible), cd to its parent",
+         "myrm"),
         ("mynew", "create the next entry in the current Everything dir and cd into it",
          "mynew \"some idea\" ai"),
     ]),
@@ -824,6 +875,19 @@ def build_parser() -> argparse.ArgumentParser:
                         "\"everything\" in it, without asking")
     p.add_argument("--label", default="everything new", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_new)
+
+    p = sub.add_parser("remove", help="delete the entry you're in and its sidecar (used by myrm)",
+                       description="Run inside an entry dir (or below it). Shows what the "
+                       "entry holds - id, sidecar, size, file count, last change, and warnings "
+                       "for git repos with uncommitted or unpushed work and for symlinks - "
+                       "then deletes the entry dir AND its sidecar, but only after you type "
+                       "the entry's 4-digit sequence number. Files go to the trash (gio trash "
+                       "or trash-put) if one is installed, else they are deleted for good; "
+                       "the prompt says which. Refuses outside an entry, without exactly one "
+                       "sidecar, for a symlink or mount point, and without a terminal. Prints "
+                       "the parent dir on success; myrm wraps this to cd there.")
+    p.add_argument("--label", default="everything remove", help=argparse.SUPPRESS)
+    p.set_defaults(func=cmd_remove)
 
     p = sub.add_parser("scan", help="search the disk for Everything dirs and save the chosen ones",
                        description="The only command that walks the disk: find every dir "

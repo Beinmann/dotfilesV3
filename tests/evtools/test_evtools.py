@@ -10,6 +10,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,7 +21,7 @@ from unittest import mock
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "modules", "base", ".config", "dotfiles"))
 
-from evtools import check, cli, discovery, entries, goto, new, rename, saved_locations, stats  # noqa: E402
+from evtools import check, cli, discovery, entries, goto, info, new, remove, rename, saved_locations, stats  # noqa: E402
 
 SHIM = os.path.join(REPO, "modules", "base", ".local", "bin", "everything")
 
@@ -1888,6 +1889,327 @@ class RenameCommandTest(TreeTest):
         self.run_rename("some_new_words_@ai_@y")
         found = check.check([self.ev])[0]
         self.assertNotIn("260005-nry", " ".join(f.name for f in found.findings))
+
+
+GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid",
+           "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
+
+
+def git(cwd, *args):
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True,
+                   env={**os.environ, **GIT_ENV})
+
+
+class EntryInfoTest(TreeTest):
+    def setUp(self):
+        super().setUp()
+        self.ev = self.p("Inf", "Everything")
+        self.entry = os.path.join(self.ev, "260005-nry")
+        os.makedirs(os.path.join(self.entry, "sub", "deeper"))
+        open(os.path.join(self.ev, "260005-nry_fire_drill_@ai_@x.md"), "w").close()
+
+    def write(self, rel, data=b"", mtime=None):
+        path = os.path.join(self.entry, rel)
+        with open(path, "wb") as f:
+            f.write(data)
+        if mtime:
+            os.utime(path, (mtime, mtime))
+        return path
+
+    def test_counts_size_and_newest(self):
+        self.write("a.txt", b"x" * 100, mtime=1_700_000_000)
+        self.write("sub/b.txt", b"y" * 20, mtime=1_700_000_500)
+        ei = info.entry_info(self.entry)
+        self.assertEqual((ei.entry.name, ei.files, ei.dirs, ei.symlinks), ("260005-nry", 2, 2, 0))
+        self.assertEqual(ei.size, entries.tree_size(self.entry))
+        self.assertGreaterEqual(ei.size, 120)
+        self.assertEqual(ei.newest, 1_700_000_500)
+        self.assertEqual([s.name for s in ei.sidecars], ["260005-nry_fire_drill_@ai_@x.md"])
+        self.assertEqual((ei.sidecars[0].description, ei.sidecars[0].tags), ("fire_drill", ("ai", "x")))
+        self.assertEqual((ei.git_repos, ei.warnings), ((), ()))
+
+    def test_empty_entry_uses_dir_mtime(self):
+        os.utime(self.entry, (1_600_000_000, 1_600_000_000))
+        self.assertEqual(info.entry_info(self.entry).newest, 1_600_000_000)
+
+    def test_symlinks_counted_never_followed(self):
+        big = self.p("outside")
+        os.makedirs(big)
+        open(os.path.join(big, "huge.bin"), "wb").write(b"z" * 5000)
+        os.symlink(big, os.path.join(self.entry, "dirlink"))
+        os.symlink(os.path.join(big, "huge.bin"), os.path.join(self.entry, "filelink"))
+        os.symlink(self.p("gone"), os.path.join(self.entry, "broken"))
+        ei = info.entry_info(self.entry)
+        self.assertEqual((ei.symlinks, ei.files, ei.dirs), (3, 0, 2))
+        self.assertLess(ei.size, 5000)
+        self.assertTrue(any("3 symlink(s)" in w for w in ei.warnings), ei.warnings)
+
+    def test_no_sidecar_and_bad_name(self):
+        os.remove(os.path.join(self.ev, "260005-nry_fire_drill_@ai_@x.md"))
+        self.assertEqual(info.entry_info(self.entry).sidecars, ())
+        with self.assertRaises(ValueError):
+            info.entry_info(self.p("Inf"))
+
+    @unittest.skipUnless(shutil.which("git"), "git not installed")
+    def test_git_repo_states(self):
+        repo = os.path.join(self.entry, "sub", "proj")
+        os.makedirs(repo)
+        git(repo, "init", "-q", "-b", "main")
+        self.write("sub/proj/f.txt", b"1")
+        git(repo, "add", "f.txt")
+        git(repo, "commit", "-q", "-m", "one")
+        ei = info.entry_info(self.entry)
+        self.assertEqual(ei.git_repos, (os.path.join("sub", "proj"),))
+        self.assertEqual(ei.warnings, ("git repo 'sub/proj': 1 commit(s) not on any remote",))
+        bare = self.p("remote.git")
+        git(self.home, "init", "-q", "--bare", "-b", "main", bare)
+        git(repo, "remote", "add", "origin", bare)
+        git(repo, "push", "-q", "origin", "main")
+        self.assertEqual(info.entry_info(self.entry).warnings, ())
+        self.write("sub/proj/f.txt", b"2")
+        self.write("sub/proj/new.txt", b"3")
+        self.assertEqual(info.entry_info(self.entry).warnings,
+                         ("git repo 'sub/proj': 2 uncommitted change(s)",))
+
+    @unittest.skipUnless(shutil.which("git"), "git not installed")
+    def test_entry_that_is_itself_a_repo(self):
+        git(self.entry, "init", "-q", "-b", "main")
+        ei = info.entry_info(self.entry)
+        self.assertEqual(ei.git_repos, (".",))
+        self.assertEqual(ei.warnings, ())  # no commits, nothing to lose
+
+    def test_unreadable_git_state_warns(self):
+        os.makedirs(os.path.join(self.entry, "r", ".git"))  # not a real repo
+        ei = info.entry_info(self.entry)
+        self.assertTrue(any("state could not be read" in w for w in ei.warnings), ei.warnings)
+
+
+class RemoveCommandTest(TreeTest):
+    def setUp(self):
+        super().setUp()
+        self.ev = self.p("Rem", "Everything")
+        self.entry = os.path.join(self.ev, "260005-nry")
+        os.makedirs(os.path.join(self.entry, "sub"))
+        open(os.path.join(self.entry, "sub", "data.txt"), "w").write("hello")
+        self.sidecar = os.path.join(self.ev, "260005-nry_fire_drill_@ai.md")
+        open(self.sidecar, "w").close()
+        self.other = os.path.join(self.ev, "260004-nry")
+        os.makedirs(self.other)
+        open(os.path.join(self.ev, "260004-nry_other.md"), "w").close()
+        self.trash = self.p("trashdir")
+        os.makedirs(self.trash)
+        # a stand-in for trash-put that moves its arguments into self.trash
+        self.stub_bin = self.p("stubbin")
+        os.makedirs(self.stub_bin)
+        stub = os.path.join(self.stub_bin, "trash-put")
+        with open(stub, "w") as f:
+            f.write(f'#!/bin/sh\n[ "$1" = -- ] && shift\nmv "$@" "{self.trash}"\n')
+        os.chmod(stub, 0o755)
+
+    def run_remove(self, stdin="", tty=True, cwd=None, tools=()):
+        """Run `remove` in `cwd`; `tools` are the trash tools that exist (stub trash-put)."""
+        cwd = cwd or self.entry
+        real_which = shutil.which
+
+        def which(name, *a, **k):
+            if name == "trash-put" and "trash-put" in tools:
+                return os.path.join(self.stub_bin, "trash-put")
+            if name == "gio" and "gio" in tools:
+                return "/usr/bin/gio"
+            return None if name in ("gio", "trash-put") else real_which(name, *a, **k)
+        out, err = io.StringIO(), io.StringIO()
+        old = os.getcwd()
+        os.chdir(cwd)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
+                    mock.patch.object(sys, "stdin", (Tty if tty else io.StringIO)(stdin)), \
+                    mock.patch.dict(os.environ, {"PWD": cwd, "PATH": self.stub_bin + os.pathsep
+                                                 + os.environ["PATH"]}), \
+                    mock.patch("shutil.which", side_effect=which):
+                rc = cli.main(["remove"])
+        finally:
+            os.chdir(old)
+        return rc, out.getvalue(), err.getvalue()
+
+    def assert_untouched(self):
+        for p in (self.entry, self.sidecar, self.other):
+            self.assertTrue(os.path.lexists(p), p)
+        self.assertEqual(os.listdir(self.trash), [])
+
+    def test_permanent_delete_removes_dir_and_sidecar(self):
+        rc, out, err = self.run_remove("0005\n")
+        self.assertEqual((rc, out), (0, self.ev + "\n"))
+        self.assertFalse(os.path.lexists(self.entry))
+        self.assertFalse(os.path.lexists(self.sidecar))
+        self.assertTrue(os.path.isdir(self.other))
+        self.assertTrue(os.path.isfile(os.path.join(self.ev, "260004-nry_other.md")))
+        self.assertIn(">>> Will be PERMANENTLY DELETED (no trash tool found) <<<", err)
+        self.assertIn("Type 0005 to delete this entry and its sidecar", err)
+        self.assertTrue(err.endswith("everything remove: deleted: 260005-nry/, "
+                                     "260005-nry_fire_drill_@ai.md\n"))
+        self.assertEqual(os.listdir(self.trash), [])
+
+    def test_summary_is_shown_before_asking(self):
+        rc, _, err = self.run_remove("\n")
+        self.assertEqual(rc, 1)
+        for text in ("Entry:        260005-nry", "Sidecar:      260005-nry_fire_drill_@ai.md",
+                     "Description:  fire_drill", "Tags:         @ai",
+                     "(1 file, 1 dir, 0 symlinks)", "Last changed: 20", "Location:     ~/Rem"):
+            self.assertIn(text, err)
+        self.assertLess(err.index("Entry:"), err.index("Type 0005"))
+
+    def test_trash_moves_both_together(self):
+        rc, out, err = self.run_remove("0005\n", tools=("trash-put",))
+        self.assertEqual((rc, out), (0, self.ev + "\n"))
+        self.assertIn(">>> Will be MOVED TO THE TRASH (restorable) <<<", err)
+        self.assertTrue(err.endswith("moved to the trash: 260005-nry/, 260005-nry_fire_drill_@ai.md\n"))
+        self.assertEqual(sorted(os.listdir(self.trash)),
+                         ["260005-nry", "260005-nry_fire_drill_@ai.md"])
+        self.assertFalse(os.path.lexists(self.entry))
+        self.assertFalse(os.path.lexists(self.sidecar))
+
+    def test_gio_is_preferred_over_trash_put(self):
+        with mock.patch("shutil.which", side_effect=lambda n: "/x/" + n):
+            self.assertEqual(remove.choose_method().trash_cmd, ["gio", "trash", "--"])
+        with mock.patch("shutil.which", side_effect=lambda n: "/x/" + n if n == "trash-put" else None):
+            self.assertEqual(remove.choose_method().trash_cmd, ["trash-put", "--"])
+        with mock.patch("shutil.which", return_value=None):
+            self.assertFalse(remove.choose_method().trash)
+
+    def test_failing_trash_tool_reports_what_is_left(self):
+        with open(os.path.join(self.stub_bin, "trash-put"), "w") as f:
+            f.write("#!/bin/sh\necho nope >&2\nexit 1\n")
+        rc, out, err = self.run_remove("0005\n", tools=("trash-put",))
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("trash-put failed (nope); removed: nothing; still there: 260005-nry/, "
+                      "260005-nry_fire_drill_@ai.md", err)
+        self.assert_untouched()
+
+    def test_wrong_confirmation_deletes_nothing(self):
+        for answer in ("", "\n", "5", "yes", "0004", "DELETE", "260005", " 0006 "):
+            rc, out, err = self.run_remove(answer + "\n")
+            self.assertEqual((rc, out), (1, ""), answer)
+            self.assertTrue(err.endswith("everything remove: not confirmed - nothing deleted\n"))
+            self.assert_untouched()
+
+    def test_confirmation_ignores_surrounding_space_only(self):
+        rc, _, _ = self.run_remove("  0005  \n")
+        self.assertEqual(rc, 0)
+
+    def test_without_terminal_refuses(self):
+        rc, out, err = self.run_remove("0005\n", tty=False)
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("needs a terminal to ask on, refusing - nothing deleted", err)
+        self.assert_untouched()
+
+    def test_from_a_subdir_deletes_the_whole_entry(self):
+        rc, out, _ = self.run_remove("0005\n", cwd=os.path.join(self.entry, "sub"))
+        self.assertEqual((rc, out), (0, self.ev + "\n"))
+        self.assertFalse(os.path.lexists(self.entry))
+
+    def test_not_inside_an_entry(self):
+        for cwd in (self.ev, self.home):
+            rc, out, err = self.run_remove("0005\n", cwd=cwd)
+            self.assertEqual((rc, out), (1, ""))
+            self.assertIn("not inside an entry dir - nothing deleted", err)
+        self.assert_untouched()
+
+    def test_no_sidecar_or_several_refuse(self):
+        os.remove(self.sidecar)
+        rc, _, err = self.run_remove("0005\n")
+        self.assertEqual(rc, 1)
+        self.assertIn("'260005-nry' has no sidecar file next to it", err)
+        self.assertTrue(os.path.isdir(self.entry))
+        for name in ("260005-nry_a.md", "260005-nry_b.md"):
+            open(os.path.join(self.ev, name), "w").close()
+        rc, _, err = self.run_remove("0005\n")
+        self.assertEqual(rc, 1)
+        self.assertIn("'260005-nry' has 2 sidecar files (260005-nry_a.md, 260005-nry_b.md)", err)
+        self.assertTrue(os.path.isdir(self.entry))
+
+    def test_never_deletes_an_outer_entry_instead(self):
+        inner = os.path.join(self.entry, "sub", "250001-sub")  # entry-like dir, no sidecar
+        os.makedirs(inner)
+        rc, out, err = self.run_remove("0005\n", cwd=inner)
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("'250001-sub' has no sidecar", err)
+        self.assert_untouched()
+        self.assertTrue(os.path.isdir(inner))
+
+    def test_symlinked_entry_is_refused(self):
+        real = self.p("elsewhere", "real")
+        os.makedirs(real)
+        link = os.path.join(self.ev, "260006-lnk")
+        os.symlink(real, link)
+        open(os.path.join(self.ev, "260006-lnk_linked.md"), "w").close()
+        rc, out, err = self.run_remove("0006\n", cwd=link)
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("'260006-lnk' is a symlink, refusing to delete through it", err)
+        self.assertTrue(os.path.isdir(real))
+        self.assertTrue(os.path.islink(link))
+
+    def test_mount_point_is_refused(self):
+        with mock.patch("os.path.ismount", side_effect=lambda p: p == self.entry):
+            rc, out, err = self.run_remove("0005\n")
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("'260005-nry' is a mount point, refusing", err)
+        self.assert_untouched()
+
+    def test_mount_point_inside_is_refused(self):
+        real = info.entry_info
+        with mock.patch.object(info, "entry_info", side_effect=lambda p: __import__(
+                "dataclasses").replace(real(p), mount_points=("sub",))):
+            rc, out, err = self.run_remove("0005\n")
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("'sub' inside the entry is another filesystem", err)
+        self.assert_untouched()
+
+    def test_failure_says_what_is_gone_and_what_is_left(self):
+        real_unlink = os.unlink
+
+        def unlink(path, *a, **k):
+            if path == self.sidecar:
+                raise PermissionError(13, "Permission denied")
+            return real_unlink(path, *a, **k)
+        with mock.patch("os.unlink", side_effect=unlink):
+            rc, out, err = self.run_remove("0005\n")
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("Permission denied: removed: 260005-nry/; still there: "
+                      "260005-nry_fire_drill_@ai.md", err)
+        self.assertFalse(os.path.lexists(self.entry))
+        self.assertTrue(os.path.lexists(self.sidecar))
+
+    def test_deleting_does_not_follow_symlinks(self):
+        outside = self.p("outside")
+        os.makedirs(outside)
+        open(os.path.join(outside, "keep.txt"), "w").close()
+        os.symlink(outside, os.path.join(self.entry, "link"))
+        rc, _, err = self.run_remove("0005\n")
+        self.assertEqual(rc, 0)
+        self.assertIn("1 symlink", err)
+        self.assertTrue(os.path.isfile(os.path.join(outside, "keep.txt")))
+
+    def test_warnings_are_shown_in_the_prompt(self):
+        os.makedirs(os.path.join(self.entry, "r", ".git"))
+        _, _, err = self.run_remove("\n")
+        self.assertIn("  WARNING: git repo 'r': state could not be read", err)
+
+    def test_myrm_shell_function_cds_to_parent_and_stays_on_failure(self):
+        functions = os.path.join(REPO, "modules", "base", ".config", "dotfiles",
+                                 "functions.d", "base.sh")
+        script = (f'everything() {{ [ "$1" = remove ] && echo "{self.ev}"; }}; '
+                  f'source "{functions}"; myrm && pwd')
+        res = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                             cwd=self.entry, env={**os.environ, "HOME": self.home})
+        self.assertEqual((res.returncode, res.stdout), (0, self.ev + "\n"), res.stderr)
+        # the real CLI refuses without a terminal and the shell stays where it was
+        res = subprocess.run(["bash", "-c", f'everything() {{ "{SHIM}" "$@"; }}; '
+                             f'source "{functions}"; myrm; echo $?; pwd'],
+                             capture_output=True, text=True, cwd=self.entry,
+                             stdin=subprocess.DEVNULL, env={**os.environ, "HOME": self.home})
+        self.assertEqual(res.stdout.splitlines(), ["1", self.entry])
+        self.assertTrue(os.path.isdir(self.entry))
 
 
 class HelpCommandTest(unittest.TestCase):
