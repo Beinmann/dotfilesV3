@@ -54,14 +54,21 @@ PERSISTENT_FILES = [
 # wants-links and drop-in overrides there) and ~/.local/bin (pip/pipx,
 # installers). Stow folds at the highest missing directory, so listing the
 # deepest dir is enough: its parents get pre-created too.
+#
+# ~/.config/dotfiles/aliases.d is shared by the base and ai modules, so it
+# must be a real dir with one link per file, never a fold into either module.
 NON_FOLDING_DIRS = {
-    "ai": ["~/.claude", "~/.local/bin"],
-    "base": ["~/.local/bin"],
+    "ai": ["~/.claude", "~/.local/bin", "~/.config/dotfiles/aliases.d"],
+    "base": ["~/.local/bin", "~/.config/dotfiles/aliases.d"],
     "services": [
         "~/.config/systemd/user/timers.target.wants",
         "~/.local/bin",
     ],
 }
+
+# Symlinks an earlier layout of the modules left in $HOME. Removed (only if
+# they still point into a module dir) before stowing.
+STALE_LINKS = ["~/.config/bash_dotfiles"]
 
 
 BASHRC_BLOCK = """\
@@ -191,6 +198,17 @@ class StowHelper:
                 return
             current = parent
 
+    def remove_stale_links(self, home_modules):
+        module_roots = [os.path.realpath(os.path.join(MODULES_DIR, m)) for m in os.listdir(MODULES_DIR)]
+        for link in STALE_LINKS:
+            expanded = os.path.expanduser(link)
+            if not os.path.islink(expanded):
+                continue
+            target = os.path.realpath(expanded)
+            if any(os.path.commonpath([target, root]) == root for root in module_roots):
+                os.unlink(expanded)
+                print(f"Removed stale symlink {expanded} (pointed to {target})")
+
     def ensure_non_folding_dirs(self, home_modules):
         for module in home_modules:
             for dir_path in NON_FOLDING_DIRS.get(module, []):
@@ -249,10 +267,12 @@ class StowHelper:
             print("--- Unstowing ---")
             self.stow_all(home_modules, sys_modules, deinit=True)
             print("--- Stowing ---")
+            self.remove_stale_links(home_modules)
             self.ensure_non_folding_dirs(home_modules)
             self.stow_all(home_modules, sys_modules, deinit=False)
         else:
             if not self.args.deinit:
+                self.remove_stale_links(home_modules)
                 self.ensure_non_folding_dirs(home_modules)
             self.stow_all(home_modules, sys_modules, deinit=self.args.deinit)
 
