@@ -1025,12 +1025,16 @@ class NewCommandTest(TreeTest):
         with open(os.path.join(self.ev, ".mynew-suffix"), "w") as f:
             f.write(text)
 
-    def run_new(self, *args, stdin=""):
+    def run_new(self, *args, stdin="", tty=False, dir=None):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
-                mock.patch.object(sys, "stdin", io.StringIO(stdin)):
-            rc = cli.main(["new", "--dir", self.ev, *args])
+                mock.patch.object(sys, "stdin", (Tty if tty else io.StringIO)(stdin)):
+            rc = cli.main(["new", "--dir", dir or self.ev, *args])
         return rc, out.getvalue(), err.getvalue()
+
+    def devbox(self, text):
+        with open(self.p(".devbox_id"), "w") as f:
+            f.write(text)
 
     def test_first_use_asks_suffix_and_saves_it(self):
         self.mk("260001-gel")
@@ -1098,8 +1102,10 @@ class NewCommandTest(TreeTest):
         self.mk("temp", "notes", "2600001")
         rc, out, err = self.run_new("x", stdin="nry\n")
         self.assertEqual((rc, out), (1, ""))
-        self.assertEqual(err, "everything new: no existing <yy><seq>[-suffix] entries found in "
-                              f"{self.ev} - this doesn't look like an Everything dir, refusing\n")
+        self.assertEqual(err, "everything new: 'Everything' has no <yy><seq>[-suffix] entries "
+                              "but contains other files (3 items), so it isn't treated as a "
+                              "new Everything dir; use an empty dir, or add a first entry by "
+                              "hand\n")
         self.assertEqual(self.names(), ["2600001", "notes", "temp"])  # not even the suffix
         rc, _, err = self.run_new("x", "--dir", self.p("nope"))
         self.assertEqual((rc, err), (1, f"everything new: not a dir: {self.p('nope')}\n"))
@@ -1172,12 +1178,173 @@ class NewCommandTest(TreeTest):
                                             f"'{entry}_hello_world_@ai.md'\n"))
 
     def test_mynew_failure_stays_put(self):
+        open(os.path.join(self.ev, "notes.txt"), "w").close()
         res = self.run_bash("mynew x; echo $?; pwd", cwd=self.ev)
         self.assertEqual(res.stdout.splitlines(), ["1", self.ev])
-        self.assertIn("mynew: no existing <yy><seq>[-suffix] entries found", res.stderr)
+        self.assertIn("mynew: 'Everything' has no <yy><seq>[-suffix] entries but contains "
+                      "other files (1 item)", res.stderr)
         res = self.run_bash("mynew; echo $?")
         self.assertEqual((res.stdout, res.stderr),
                          ("1\n", "mynew: 1 argument required, description (plus optional tags)\n"))
+
+    # starting a new Everything dir (ticket 025)
+
+    def plain(self, *names):
+        d = self.p("New", "plain")
+        os.makedirs(d)
+        for n in names:
+            open(os.path.join(d, n), "w").close()
+        return d
+
+    def test_empty_everything_dir_gets_its_first_entry(self):
+        rc, out, err = self.run_new("First idea", "ai", stdin="nry\n")
+        self.assertEqual((rc, out), (0, os.path.join(self.ev, "260001-nry") + "\n"))
+        self.assertNotIn("year prefix rolled over", err)
+        self.assertEqual(self.names(), [".mynew-suffix", "260001-nry", "260001-nry_first_idea_@ai.md"])
+
+    def test_dir_with_only_a_suffix_file_counts_as_empty(self):
+        self.suffix_file("nry")
+        rc, out, _ = self.run_new("x")
+        self.assertEqual((rc, out), (0, os.path.join(self.ev, "260001-nry") + "\n"))
+
+    def test_empty_dir_without_everything_in_name_asks_why(self):
+        d = self.plain()
+        rc, out, err = self.run_new("x", stdin="y\n", dir=d)  # no terminal
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("'plain' is empty and its name doesn't contain 'everything'; start a "
+                      "new Everything dir here? - no terminal to ask on, refusing (use --yes)",
+                      err)
+        self.assertEqual(os.listdir(d), [])
+        rc, out, err = self.run_new("x", "--yes", stdin="nry\n", dir=d)
+        self.assertEqual((rc, out), (0, os.path.join(d, "260001-nry") + "\n"))
+
+    def test_empty_dir_confirm_yes_and_no(self):
+        d = self.plain()
+        rc, _, err = self.run_new("x", stdin="n\n", tty=True, dir=d)
+        self.assertEqual(rc, 1)
+        self.assertIn("start a new Everything dir here? [y/N] ", err)
+        self.assertTrue(err.endswith("everything new: not started\n"))
+        self.assertEqual(os.listdir(d), [])
+        rc, out, _ = self.run_new("x", stdin="y\nnry\n", tty=True, dir=d)
+        self.assertEqual((rc, out), (0, os.path.join(d, "260001-nry") + "\n"))
+
+    def test_case_insensitive_everything_name_needs_no_question(self):
+        d = self.p("New", "my-EVERYTHING-notes")
+        os.makedirs(d)
+        rc, _, err = self.run_new("x", stdin="nry\n", dir=d)
+        self.assertEqual(rc, 0)
+        self.assertNotIn("start a new Everything dir", err)
+
+    def test_non_empty_dir_without_entries_is_still_refused(self):
+        d = self.plain("a.txt", "b.txt")
+        rc, out, err = self.run_new("x", "--yes", stdin="nry\n", dir=d)
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("'plain' has no <yy><seq>[-suffix] entries but contains other files "
+                      "(2 items)", err)
+        self.assertEqual(sorted(os.listdir(d)), ["a.txt", "b.txt"])
+
+    # suffix sources
+
+    def test_devbox_suffix_is_used_without_asking_and_saved(self):
+        self.devbox("nry\n")
+        rc, out, err = self.run_new("x", stdin="ignored\n")
+        self.assertEqual((rc, out), (0, os.path.join(self.ev, "260001-nry") + "\n"))
+        self.assertIn("everything new: using suffix 'nry' from ~/.devbox_id\n", err)
+        self.assertNotIn("Suffix to use", err)
+        with open(os.path.join(self.ev, ".mynew-suffix")) as f:
+            self.assertEqual(f.read(), "nry")
+        os.remove(self.p(".devbox_id"))  # later runs don't depend on it
+        rc, out, err = self.run_new("y")
+        self.assertEqual((rc, out), (0, os.path.join(self.ev, "260002-nry") + "\n"))
+        self.assertNotIn("devbox", err)
+
+    def test_invalid_devbox_content_refuses(self):
+        self.mk("260001")
+        self.devbox("a-b\n")
+        rc, out, err = self.run_new("x", stdin="nry\n")
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("~/.devbox_id holds 'a-b', but a suffix may only be letters and digits",
+                      err)
+        self.assertEqual(self.names(), ["260001"])
+
+    def test_blank_devbox_file_is_ignored(self):
+        self.mk("260001")
+        self.devbox("  \n")
+        rc, _, err = self.run_new("x", stdin="nry\n")
+        self.assertEqual(rc, 0)
+        self.assertIn("Suffix to use for new entries here", err)
+
+    def test_existing_suffix_file_wins_over_devbox(self):
+        self.mk("260001")
+        self.devbox("box\n")
+        self.suffix_file("mine")
+        rc, out, err = self.run_new("x")
+        self.assertEqual((rc, out), (0, os.path.join(self.ev, "260002-mine") + "\n"))
+        self.assertNotIn("devbox", err)
+        self.suffix_file("")  # "no suffix" is a choice too
+        rc, out, _ = self.run_new("y")
+        self.assertEqual(out, os.path.join(self.ev, "260003") + "\n")
+
+    def test_suffix_flag_is_for_one_entry_only(self):
+        self.mk("260001")
+        self.suffix_file("keep")
+        self.devbox("box\n")
+        rc, out, err = self.run_new("x", "--suffix", "once")
+        self.assertEqual((rc, out), (0, os.path.join(self.ev, "260002-once") + "\n"))
+        self.assertNotIn("devbox", err)
+        with open(os.path.join(self.ev, ".mynew-suffix")) as f:
+            self.assertEqual(f.read(), "keep")
+        rc, _, _ = self.run_new("y", "--suffix", "")  # explicit "none"
+        self.assertEqual(rc, 0)
+        self.assertIn("260003_y.md", self.names())
+
+    def test_suffix_flag_saves_nothing_in_a_new_dir(self):
+        rc, _, _ = self.run_new("x", "--suffix", "abc")
+        self.assertEqual((rc, self.names()), (0, ["260001-abc", "260001-abc_x.md"]))
+
+    def test_suffix_flag_is_validated(self):
+        self.mk("260001")
+        rc, _, err = self.run_new("x", "--suffix", "a-b")
+        self.assertEqual(rc, 1)
+        self.assertIn("suffix 'a-b' may only be letters and digits", err)
+        self.assertEqual(self.names(), ["260001"])
+
+    def test_ask_suffix_replaces_the_saved_one(self):
+        self.mk("260001-old")
+        self.suffix_file("old")
+        self.devbox("box\n")
+        rc, out, err = self.run_new("x", "--ask-suffix", stdin="new\n", tty=True)
+        self.assertEqual((rc, out), (0, os.path.join(self.ev, "260002-new") + "\n"))
+        self.assertIn("Suffix to use for new entries here", err)
+        with open(os.path.join(self.ev, ".mynew-suffix")) as f:
+            self.assertEqual(f.read(), "new")
+
+    def test_ask_suffix_needs_a_terminal_and_a_valid_answer(self):
+        self.mk("260001")
+        rc, _, err = self.run_new("x", "--ask-suffix", stdin="nry\n")
+        self.assertEqual(rc, 1)
+        self.assertIn("--ask-suffix needs a terminal", err)
+        rc, _, err = self.run_new("x", "--ask-suffix", stdin="a b\n", tty=True)
+        self.assertEqual(rc, 1)
+        self.assertEqual(self.names(), ["260001"])
+
+    def test_suffix_flags_cannot_be_combined(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+            cli.main(["new", "--dir", self.ev, "x", "--suffix", "a", "--ask-suffix"])
+        self.assertIn("not allowed with", err.getvalue())
+        self.assertEqual(self.names(), [])
+
+    def test_mynew_in_empty_dir_from_shell(self):
+        self.devbox("nry\n")
+        res = subprocess.run(
+            ["bash", "-c", f'everything() {{ "{SHIM}" "$@"; }}; source "{self.functions()}"; '
+             'mynew "Hello" && pwd'],
+            capture_output=True, text=True, cwd=self.ev, stdin=subprocess.DEVNULL,
+            env={**os.environ, "HOME": self.home})
+        year = time.strftime("%y")
+        self.assertEqual((res.returncode, res.stdout),
+                         (0, os.path.join(self.ev, f"{year}0001-nry") + "\n"), res.stderr)
 
     def functions(self):
         return os.path.join(REPO, "modules", "base", ".config", "dotfiles", "functions.d", "base.sh")

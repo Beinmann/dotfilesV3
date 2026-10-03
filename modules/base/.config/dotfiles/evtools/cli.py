@@ -424,6 +424,40 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 1 if counts else 0
 
 
+def _ask_suffix(prog: str, d: str) -> str:
+    # everything but the new path goes to stderr: mynew runs this in $(...)
+    print(f"{prog}: no suffix configured for {d} yet.", file=sys.stderr)
+    print("Suffix to use for new entries here (leave blank for none): ",
+          end="", file=sys.stderr, flush=True)
+    answer = sys.stdin.readline()
+    if not answer:
+        print(file=sys.stderr)
+        raise new.Refusal("no answer, refusing (nothing saved)")
+    return new.check_suffix(answer)
+
+
+def _pick_suffix(args: argparse.Namespace, prog: str, d: str) -> tuple[str, str | None]:
+    """(suffix to use, suffix to save to .mynew-suffix or None).
+
+    --suffix: used once, nothing saved. --ask-suffix: asked, replaces the saved one.
+    Otherwise the saved one wins, then ~/.devbox_id (saved), then ask (saved).
+    """
+    if args.suffix is not None:
+        return new.check_suffix(args.suffix), None
+    if args.ask_suffix:
+        suffix = _ask_suffix(prog, d)
+        return suffix, suffix
+    suffix = new.read_suffix(d)
+    if suffix is not None:
+        return suffix, None
+    suffix = new.read_devbox_suffix(os.path.expanduser("~"))
+    if suffix is not None:
+        print(f"{prog}: using suffix '{suffix}' from ~/{new.DEVBOX_FILE}", file=sys.stderr)
+        return suffix, suffix
+    suffix = _ask_suffix(prog, d)
+    return suffix, suffix
+
+
 def cmd_new(args: argparse.Namespace) -> int:
     """Create the next entry dir + sidecar and print its path, for mynew to cd into."""
     prog = args.label
@@ -431,22 +465,20 @@ def cmd_new(args: argparse.Namespace) -> int:
     if not os.path.isdir(d):
         print(f"{prog}: not a dir: {args.dir}", file=sys.stderr)
         return 1
+    year = new.current_year()
     try:
-        suffix = new.read_suffix(d)
-        save = None
-        if suffix is None:
-            # plan once first, so a non-Everything dir is refused before asking
-            new.plan(d, args.description, args.tags, "", new.current_year())
-            # everything but the new path goes to stderr: mynew runs this in $(...)
-            print(f"{prog}: no suffix configured for {d} yet.", file=sys.stderr)
-            print("Suffix to use for new entries here (leave blank for none): ",
-                  end="", file=sys.stderr, flush=True)
-            answer = sys.stdin.readline()
-            if not answer:
-                print(file=sys.stderr)
-                raise new.Refusal("no answer, refusing (nothing saved)")
-            suffix = save = new.check_suffix(answer)
-        p = new.plan(d, args.description, args.tags, suffix, new.current_year())
+        if args.ask_suffix and not sys.stdin.isatty():
+            raise new.Refusal("--ask-suffix needs a terminal to ask on, refusing")
+        # plan once first, so a bad dir is refused before anything is asked
+        new.plan(d, args.description, args.tags, "", year)
+        if not new.entries.list_entries(d):
+            name = os.path.basename(d)
+            if not discovery.is_everything_name(name) and not prompt.confirm(
+                    prog, f"'{name}' is empty and its name doesn't contain 'everything'; "
+                    "start a new Everything dir here?", args.yes, hint=" (use --yes)"):
+                raise new.Refusal("not started")
+        suffix, save = _pick_suffix(args, prog, d)
+        p = new.plan(d, args.description, args.tags, suffix, year)
     except new.Refusal as e:
         print(f"{prog}: {e}", file=sys.stderr)
         return 1
@@ -460,7 +492,7 @@ def cmd_new(args: argparse.Namespace) -> int:
         print(f"{prog}: note: description ends in \"_{words[-1]}\", did you mean tag "
               f"@{words[-1]}? (tags go after the quoted description)", file=sys.stderr)
     try:
-        path = new.create(p, save)
+        path = new.create(p, save, replace_suffix=args.ask_suffix)
     except OSError as e:
         print(f"{prog}: {e}", file=sys.stderr)
         return 1
@@ -771,12 +803,25 @@ def build_parser() -> argparse.ArgumentParser:
                        "Everything dir (the current dir by default) plus its empty sidecar "
                        "\"<entry>_<description>[_@tag...].md\", and print the new dir's "
                        "path. seq is one past the highest id there and restarts at 0001 in a "
-                       "new year. The suffix is asked once per dir and saved in its "
-                       "\".mynew-suffix\". Refuses in a dir without entries and never "
-                       "overwrites anything. mynew wraps this to cd there.")
+                       "new year. In an empty dir it creates the first entry (after asking, if "
+                       "the dir name has no \"everything\" in it; without a terminal that "
+                       "needs --yes); a dir with other files but no entries is refused. The "
+                       "suffix is the one in the dir's \".mynew-suffix\", else the content of "
+                       "~/.devbox_id, else it is asked once; the one used is saved in "
+                       "\".mynew-suffix\". Never overwrites an entry or sidecar. mynew wraps "
+                       "this to cd there.")
     p.add_argument("description", help="free text, turned into lower_snake_case")
     p.add_argument("tags", nargs="*", metavar="tag", help="tags, with or without a leading @")
     p.add_argument("--dir", default=".", help="the Everything dir (default: current dir)")
+    which = p.add_mutually_exclusive_group()
+    which.add_argument("--suffix", metavar="S",
+                       help="use suffix S for this entry only; nothing is saved")
+    which.add_argument("--ask-suffix", action="store_true",
+                       help="ask for a suffix (needs a terminal) and save it to "
+                            ".mynew-suffix, replacing the old one")
+    p.add_argument("--yes", action="store_true",
+                   help="start a new Everything dir in an empty dir whose name has no "
+                        "\"everything\" in it, without asking")
     p.add_argument("--label", default="everything new", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_new)
 

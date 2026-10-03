@@ -235,13 +235,14 @@ duh() {
 # matching empty sidecar file "<entry>_<snake_case_description>[_@tag...].md",
 # see duh() above).
 #
-# Must be run from inside an existing Everything dir. On first use in a given
-# dir it asks once which suffix to use there (can be left blank) and
-# remembers it in a hidden ".mynew-suffix" file in that dir from then on.
+# Run from inside an Everything dir; an empty dir starts a new one (asking first
+# if its name has no "everything" in it; --yes skips that). The suffix is the one
+# in the dir's hidden ".mynew-suffix", else ~/.devbox_id, else asked once; the
+# one used is saved there. --suffix S: this entry only; --ask-suffix: ask and replace.
 # The work is done by `everything new` (see ~/.local/bin/everything); this
 # only does the cd, which a subprocess can't do for the shell.
 #
-# Usage: mynew "description" [tag ...]
+# Usage: mynew "description" [tag ...] [--suffix S | --ask-suffix] [--yes]
 #   tags may be passed with or without a leading "@" (e.g. "ai" or "@ai").
 mynew() {
     local dir
