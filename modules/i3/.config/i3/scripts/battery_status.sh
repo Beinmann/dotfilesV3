@@ -19,10 +19,14 @@ done
 [[ $count -eq 0 ]] && exit 0
 capacity=$((total / count))
 
+# Glyphs are FontAwesome private-use codepoints; the bar's default font does
+# not cover them, so name the font explicitly (needs markup=pango). Glyphs
+# are written as UTF-8 bytes so the output doesn't depend on the locale.
+fa() { printf "<span font='FontAwesome'>%s</span>" "$1"; }
 case $state in
-    Discharging) icon='' ;;          # battery
-    Charging)    icon=' ' ;;   # bolt + plug
-    *)           icon='' ;;          # plug (full / not charging)
+    Discharging) icon=$(fa $'\xef\x89\x80') ;;                   # battery
+    Charging)    icon="$(fa $'\xef\x83\xa7') $(fa $'\xef\x87\xa6')" ;; # bolt + plug
+    *)           icon=$(fa $'\xef\x87\xa6') ;;                   # plug (full / not charging)
 esac
 
 echo "$icon ${capacity}%"

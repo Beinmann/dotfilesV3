@@ -35,7 +35,7 @@ bash Scripts/Initialization_and_Saving_State_Scripts/apt_install_programs.sh
 git submodule update --init --recursive
 ```
 
-This pulls in the nvim config, RAM monitor script, and i3blocks-contrib scripts.
+This pulls in the nvim config and the RAM monitor script.
 
 ### Guided setup (recommended)
 
@@ -107,7 +107,7 @@ See `claude_settings/README.md` for how defaults and enforced settings differ.
 | Module | Description |
 |---|---|
 | `base` | Core shell setup: `.bashrc`, shell settings, aliases, functions, plugins. The foundation — should always be active. |
-| `i3` | Full i3 window manager configuration including i3blocks status bar, workspace scripts, and the i3blocks-contrib scripts as a submodule. |
+| `i3` | Full i3 window manager configuration including i3blocks status bar, workspace scripts, and the in-repo status bar blocks (volume, CPU, memory, battery). |
 | `nvim` | Neovim configuration (submodule pointing to a separate nvim config repo). |
 | `vim` | Vim configuration for when neovim isn't available. |
 | `scripts` | Miscellaneous helper scripts (RAM monitor etc.) managed as submodules. |
