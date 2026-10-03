@@ -20,7 +20,7 @@ color=#928374
 label=
 command=date '+%H:%M'
 color=#EBDBB2
-interval=60
+interval=5
 
 
 # --- Audio ---
@@ -37,7 +37,7 @@ color=#B8BB26
 [battery]
 command=$HOME/.config/i3/scripts/battery_status.sh
 markup=pango
-interval=30
+interval=10
 
 
 # --- Network (uncomment if needed) ---

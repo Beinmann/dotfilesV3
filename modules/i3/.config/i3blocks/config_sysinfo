@@ -11,7 +11,7 @@ markup=none
 command=$HOME/.config/i3/scripts/cpu_status.sh
 color=#FE8019
 min_width=CPU 100.00%
-interval=10
+interval=2
 separator=false
 separator_block_width=5
 
@@ -19,7 +19,7 @@ separator_block_width=5
 command=$HOME/.config/i3/scripts/memory_status.sh
 color=#83A598
 min_width=MEM 100%
-interval=30
+interval=5
 
 
 # --- Date ---
