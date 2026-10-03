@@ -106,7 +106,7 @@ See `claude_settings/README.md` for how defaults and enforced settings differ.
 
 | Module | Description |
 |---|---|
-| `base` | Core shell setup: `.bashrc`, shell settings, aliases, functions, plugins. The foundation — should always be active. |
+| `base` | Core shell setup: `bashrc.sh` (hooked into `~/.bashrc` by a managed block), shell settings, aliases, functions, plugins. The foundation — should always be active. |
 | `i3` | Full i3 window manager configuration including i3blocks status bar, workspace scripts, and the in-repo status bar blocks (volume, CPU, memory, battery). |
 | `nvim` | Neovim configuration (submodule pointing to a separate nvim config repo). |
 | `vim` | Vim configuration for when neovim isn't available. |
@@ -128,14 +128,14 @@ Shell aliases, functions, and plugin/tool integrations that are module-specific 
   system_local/   # machine-specific overrides (not tracked in git)
 ```
 
-These directories are glob-sourced by `.bashrc` at shell startup. If a module isn't stowed, its file doesn't exist and nothing is loaded — no conditionals needed.
+These directories are glob-sourced by `~/.config/dotfiles/bashrc.sh` (which a managed block in your own `~/.bashrc` sources) at shell startup. If a module isn't stowed, its file doesn't exist and nothing is loaded — no conditionals needed.
 
 ### Machine-specific config
 
 For tooling that is local to a single machine and should not be tracked in git (e.g. nvm, conda, company-specific paths), the init script automatically creates these files on first run if they don't exist:
 
 ```
-~/.config/dotfiles/system_local/bashrc.sh      # sourced by .bashrc at startup
+~/.config/dotfiles/system_local/bashrc.sh      # sourced by bashrc.sh at startup
 ~/.config/dotfiles/system_local/i3_config_addon # included by i3 config at startup
 ```
 

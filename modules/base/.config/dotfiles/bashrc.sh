@@ -1,4 +1,5 @@
-# ~/.bashrc: executed by bash(1) for non-login shells.
+# Entry point for interactive bash, sourced from the managed block that
+# init_or_deinit_stow.py appends to ~/.bashrc.
 
 export EDITOR=vim
 export VISUAL=vim
@@ -9,8 +10,6 @@ case $- in
       *) return;;
 esac
 
-
-####################### Imports
 for f in ~/.config/dotfiles/settings.d/*.sh; do [ -f "$f" ] && . "$f"; done
 for f in ~/.config/dotfiles/aliases.d/*.sh; do [ -f "$f" ] && . "$f"; done
 for f in ~/.config/dotfiles/functions.d/*.sh; do [ -f "$f" ] && . "$f"; done
@@ -19,10 +18,3 @@ for f in ~/.config/dotfiles/plugins.d/*.sh; do [ -f "$f" ] && . "$f"; done
 if [ -f ~/.config/dotfiles/system_local/bashrc.sh ]; then
     . ~/.config/dotfiles/system_local/bashrc.sh
 fi
-
-
-####################### PATH
-export PATH=/usr/local/node/bin:$PATH
-export PATH="$PATH:~/bin"
-export PATH="$PATH:$HOME/Main/Tools/decker"
-export PATH=$PATH:/sbin:/usr/sbin
