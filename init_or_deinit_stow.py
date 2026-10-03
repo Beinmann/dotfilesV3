@@ -74,6 +74,9 @@ STALE_LINKS = ["~/.config/bash_dotfiles"]
 BASHRC_BLOCK = """\
 [ -f ~/.config/dotfiles/bashrc.sh ] && . ~/.config/dotfiles/bashrc.sh
 """
+PROFILE_BLOCK = """\
+[ -f ~/.config/dotfiles/profile.sh ] && . ~/.config/dotfiles/profile.sh
+"""
 BLOCK_NAME = "dotfiles"
 BACKUP_SUFFIX = ".pre-dotfiles"
 
@@ -167,6 +170,20 @@ class StowHelper:
                   "~/.profile and may never read ~/.bashrc.")
         try:
             result = add_managed_block(path, BASHRC_BLOCK)
+        except ManagedBlockError as e:
+            print(f"Error: {e}")
+            return
+        if result == "added":
+            print(f"Added the dotfiles block to {path}")
+
+    def manage_profile(self, deinit):
+        path = os.path.expanduser("~/.profile")
+        if deinit:
+            if remove_managed_block(path) == "removed":
+                print(f"Removed the dotfiles block from {path}")
+            return
+        try:
+            result = add_managed_block(path, PROFILE_BLOCK)
         except ManagedBlockError as e:
             print(f"Error: {e}")
             return
@@ -276,6 +293,7 @@ class StowHelper:
 
         if "base" in home_modules:
             self.manage_bashrc(self.args.deinit)
+            self.manage_profile(self.args.deinit)
 
         if not self.args.deinit and "ai" in home_modules:
             self.sync_claude_settings()

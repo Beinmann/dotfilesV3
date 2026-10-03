@@ -114,3 +114,40 @@ class ManagedBlockTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProfileTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = os.path.join(tmp.name, ".profile")
+
+    def run_manage(self, deinit):
+        with mock.patch("os.path.expanduser", return_value=self.path):
+            ios.StowHelper.manage_profile(mock.Mock(), deinit=deinit)
+
+    def test_block_added_once_and_existing_lines_kept(self):
+        with open(self.path, "w") as f:
+            f.write("umask 022\n")
+        self.run_manage(False)
+        self.run_manage(False)
+        with open(self.path) as f:
+            text = f.read()
+        self.assertTrue(text.startswith("umask 022\n"))
+        self.assertEqual(text.count(BEGIN), 1)
+        self.assertIn("profile.sh", text)
+
+    def test_symlink_aborts(self):
+        target = self.path + ".real"
+        open(target, "w").close()
+        os.symlink(target, self.path)
+        self.run_manage(False)
+        self.assertEqual(os.path.getsize(target), 0)
+
+    def test_deinit_removes_only_block(self):
+        with open(self.path, "w") as f:
+            f.write("umask 022\n")
+        self.run_manage(False)
+        self.run_manage(True)
+        with open(self.path) as f:
+            self.assertEqual(f.read(), "umask 022\n")
