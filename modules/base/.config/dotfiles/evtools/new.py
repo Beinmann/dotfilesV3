@@ -6,8 +6,8 @@ past the highest id in the dir (whatever its suffix) and restarts at 0001
 when the year changes. The suffix is asked for once per Everything dir and
 kept in its ".mynew-suffix" file.
 
-The only part of evtools that writes, and only those three things; it never
-overwrites anything.
+With rename.py the only part of evtools that writes, and new.py only those
+three things; it never overwrites anything.
 """
 
 import datetime

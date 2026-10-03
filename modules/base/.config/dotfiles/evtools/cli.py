@@ -8,7 +8,7 @@ import subprocess
 import sys
 from collections import Counter
 
-from . import check, discovery, entries, goto, new, stats
+from . import check, discovery, entries, goto, new, rename, stats
 
 
 def _tilde(path: str, home: str) -> str:
@@ -492,6 +492,26 @@ def cmd_new(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rename(args: argparse.Namespace) -> int:
+    """Edit the sidecar name of the entry the current dir is in, in $EDITOR."""
+    cwd = os.getcwd()
+    pwd = os.environ.get("PWD", "")
+    if pwd and os.path.realpath(pwd) == os.path.realpath(cwd):
+        cwd = pwd  # keeps the name of a symlinked entry dir
+    try:
+        target = rename.find_target(cwd)
+        new_name = rename.ask_name(target)
+        if new_name is None:
+            print("everything rename: cancelled or unchanged, nothing renamed", file=sys.stderr)
+            return 1
+        rename.rename(target, new_name)
+    except (rename.Refusal, OSError) as e:
+        print(f"everything rename: {e}", file=sys.stderr)
+        return 1
+    print(f"everything rename: '{target.sidecar.name}' -> '{new_name}'", file=sys.stderr)
+    return 0
+
+
 # Hand-written on purpose (ticket 020); a test fails if a subcommand or an
 # Everything wrapper in functions.d/aliases.d is missing here.
 # (group title, [(name, one-line description, example), ...])
@@ -511,6 +531,8 @@ OVERVIEW = [
          "everything check --all-levels"),
         ("new", "create the next entry dir + sidecar and print its path",
          "everything new \"some idea\" ai"),
+        ("rename", "edit the sidecar name of the entry you're in, in $EDITOR",
+         "everything rename"),
         ("help", "this overview", "everything help"),
     ]),
     ("Shell functions and aliases (functions.d / aliases.d)", [
@@ -690,6 +712,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dir", default=".", help="the Everything dir (default: current dir)")
     p.add_argument("--label", default="everything new", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_new)
+
+    p = sub.add_parser("rename", help="edit the sidecar name of the entry you're in, in $EDITOR",
+                       description="Run inside an entry dir (or below it): open $EDITOR "
+                       "(default vim) on the part of the sidecar name after the entry id "
+                       "and before the extension, e.g. \"working_on_dotfiles_@ai\", and "
+                       "rename the sidecar to the edited text. The name is checked first "
+                       "(letters, digits, _ and _@tags, at most 80 characters, no existing "
+                       "file); on a problem the editor reopens with the error shown. An "
+                       "editor error (:cq), an empty line or no change renames nothing and "
+                       "exits 1.")
+    p.set_defaults(func=cmd_rename)
 
     p = sub.add_parser("help", help="overview of every Everything-dir command, incl. shell "
                        "wrappers", description="Print a short overview of the `everything` "

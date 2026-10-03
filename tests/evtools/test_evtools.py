@@ -20,7 +20,7 @@ from unittest import mock
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "modules", "base", ".config", "dotfiles"))
 
-from evtools import check, cli, discovery, entries, goto, new, stats  # noqa: E402
+from evtools import check, cli, discovery, entries, goto, new, rename, stats  # noqa: E402
 
 SHIM = os.path.join(REPO, "modules", "base", ".local", "bin", "everything")
 
@@ -1290,6 +1290,164 @@ def everything_wrappers():
             break
         wrappers |= more
     return {n for n in wrappers if not n.startswith("_")}
+
+
+class RenameCommandTest(TreeTest):
+    """`everything rename`, with $EDITOR stubbed by a script that replays EDITS."""
+
+    STUB = (
+        "import sys\n"
+        "queue, target = sys.argv[1], sys.argv[2]\n"
+        "edits = open(queue).read().split('\\n')[:-1]\n"
+        "if not edits:\n"
+        "    sys.exit('editor opened more often than expected')\n"
+        "first, rest = edits[0], edits[1:]\n"
+        "open(queue, 'w').write(''.join(e + '\\n' for e in rest))\n"
+        "open(queue + '.seen', 'a').write(open(target).read() + '----\\n')\n"
+        "if first == '!FAIL':\n"
+        "    sys.exit(1)\n"
+        "if first != '!KEEP':\n"
+        "    lines = open(target).read().split('\\n')\n"
+        "    lines[0] = first\n"
+        "    open(target, 'w').write('\\n'.join(lines))\n"
+    )
+
+    def setUp(self):
+        super().setUp()
+        self.ev = self.p("Ren", "Everything")
+        os.makedirs(os.path.join(self.ev, "260005-nry", "deep", "er"))
+        self.sidecar = "260005-nry_fire_drill_@ai.md"
+        open(os.path.join(self.ev, self.sidecar), "w").close()
+        open(os.path.join(self.ev, "260004-nry_other.md"), "w").close()
+        os.mkdir(os.path.join(self.ev, "260004-nry"))
+        self.stub = self.p("stub.py")
+        self.queue = self.p("queue")
+        with open(self.stub, "w") as f:
+            f.write(self.STUB)
+
+    def run_rename(self, *edits, cwd=None):
+        with open(self.queue, "w") as f:
+            f.write("".join(e + "\n" for e in edits))
+        cwd = cwd or os.path.join(self.ev, "260005-nry")
+        env = {"EDITOR": f"{sys.executable} {self.stub} {self.queue}", "PWD": cwd}
+        out, err = io.StringIO(), io.StringIO()
+        old = os.getcwd()
+        os.chdir(cwd)
+        try:
+            with mock.patch.dict(os.environ, env), contextlib.redirect_stdout(out), \
+                    contextlib.redirect_stderr(err):
+                rc = cli.main(["rename"])
+        finally:
+            os.chdir(old)
+        return rc, out.getvalue(), err.getvalue()
+
+    def names(self):
+        return sorted(n for n in os.listdir(self.ev) if n.endswith(".md"))
+
+    def seen(self):
+        with open(self.queue + ".seen") as f:
+            return f.read()
+
+    def test_renames_and_shows_editable_part_only(self):
+        rc, out, err = self.run_rename("fire_drill_v2_@ai_@x")
+        self.assertEqual((rc, out), (0, ""))
+        self.assertEqual(err, "everything rename: '260005-nry_fire_drill_@ai.md' -> "
+                              "'260005-nry_fire_drill_v2_@ai_@x.md'\n")
+        self.assertEqual(self.names(), ["260004-nry_other.md",
+                                        "260005-nry_fire_drill_v2_@ai_@x.md"])
+        self.assertTrue(self.seen().startswith("fire_drill_@ai\n# "))
+        self.assertTrue(os.path.isdir(os.path.join(self.ev, "260005-nry")))
+
+    def test_works_from_a_subdir_and_keeps_extension(self):
+        os.rename(os.path.join(self.ev, self.sidecar),
+                  os.path.join(self.ev, "260005-nry_fire_drill_@ai.txt"))
+        rc, _, _ = self.run_rename("Fire_Drill_2", cwd=os.path.join(self.ev, "260005-nry", "deep", "er"))
+        self.assertEqual(rc, 0)
+        self.assertIn("260005-nry_Fire_Drill_2.txt", os.listdir(self.ev))
+
+    def test_symlinked_entry_dir(self):
+        os.symlink(self.p("elsewhere"), os.path.join(self.ev, "260006-lnk"))
+        os.makedirs(self.p("elsewhere"), exist_ok=True)
+        open(os.path.join(self.ev, "260006-lnk_linked.md"), "w").close()
+        rc, _, _ = self.run_rename("linked_two", cwd=os.path.join(self.ev, "260006-lnk"))
+        self.assertEqual(rc, 0)
+        self.assertIn("260006-lnk_linked_two.md", os.listdir(self.ev))
+
+    def assert_untouched(self):
+        self.assertEqual([n for n in self.names() if os.path.isfile(os.path.join(self.ev, n))],
+                         ["260004-nry_other.md", self.sidecar])
+
+    def test_not_inside_an_entry(self):
+        for cwd in (self.ev, self.home):
+            rc, _, err = self.run_rename("x", cwd=cwd)
+            self.assertEqual(rc, 1)
+            self.assertIn("not inside an entry dir", err)
+        self.assert_untouched()
+
+    def test_entry_without_exactly_one_sidecar(self):
+        os.mkdir(os.path.join(self.ev, "260007-nry"))  # no sidecar
+        rc, _, err = self.run_rename("x", cwd=os.path.join(self.ev, "260007-nry"))
+        self.assertEqual((rc, "not inside an entry dir" in err), (1, True))
+        open(os.path.join(self.ev, "260005-nry_second.md"), "w").close()
+        rc, _, err = self.run_rename("x")
+        self.assertEqual((rc, "not inside an entry dir" in err), (1, True))
+        self.assertFalse(os.path.exists(self.queue + ".seen"))
+
+    def test_cancelled_or_unchanged_renames_nothing(self):
+        for edit in ("!FAIL", "", "fire_drill_@ai", "!KEEP"):
+            rc, _, err = self.run_rename(edit)
+            self.assertEqual(rc, 1, edit)
+            self.assertIn("nothing renamed", err)
+        self.assert_untouched()
+
+    def test_rejections_reopen_editor_with_error(self):
+        cases = [
+            ("has space", "whitespace"), ("a/b", "'/'"), ("na\u00efve", "characters not allowed"),
+            ("a.b", "'.'"), ("_lead", "leading, trailing or doubled _"),
+            ("trail_", "leading, trailing or doubled _"), ("a__b", "leading, trailing or doubled _"),
+            ("a_@", "malformed tag"), ("a_@@x", "malformed tag"), ("a_b@c", "malformed tag"),
+            ("@ai_desc", "start with a description"), ("a_@ai_more", "put all tags last"),
+            ("x" * 81, "81 characters, at most 80"), ("other", None),
+        ]
+        for text, message in cases[:-1]:
+            # first edit is rejected, the second saves the same text again: cancelled
+            rc, _, err = self.run_rename(text, "!KEEP")
+            self.assertEqual(rc, 1, text)
+            self.assertIn(f"# ERROR: ", self.seen(), text)
+            self.assertIn(message, self.seen(), text)
+            os.remove(self.queue + ".seen")
+        self.assert_untouched()
+
+    def test_correcting_after_an_error_renames(self):
+        rc, _, err = self.run_rename("bad name", "good_name")
+        self.assertEqual(rc, 0)
+        seen = self.seen().split("----\n")
+        self.assertTrue(seen[1].startswith("bad name\n# ERROR: the name contains whitespace; "))
+        self.assertIn("260005-nry_good_name.md", os.listdir(self.ev))
+
+    def test_max_length_is_accepted(self):
+        rc, _, _ = self.run_rename("x" * 80)
+        self.assertEqual(rc, 0)
+        self.assertIn("260005-nry_" + "x" * 80 + ".md", os.listdir(self.ev))
+
+    def test_existing_target_is_rejected_and_never_overwritten(self):
+        # a dir (or dangling symlink) with that name isn't a sidecar, but blocks the name
+        os.mkdir(os.path.join(self.ev, "260005-nry_taken.md"))
+        rc, _, _ = self.run_rename("taken", "!FAIL")
+        self.assertEqual(rc, 1)
+        self.assertIn("'260005-nry_taken.md' already exists", self.seen())
+        self.assertIn(self.sidecar, os.listdir(self.ev))
+
+    def test_rename_refuses_existing_target_directly(self):
+        target = rename.find_target(os.path.join(self.ev, "260005-nry"))
+        open(os.path.join(self.ev, "260005-nry_taken.md"), "w").close()
+        with self.assertRaises(rename.Refusal):
+            rename.rename(target, "260005-nry_taken.md")
+
+    def test_result_passes_everything_check(self):
+        self.run_rename("some_new_words_@ai_@y")
+        found = check.check([self.ev])[0]
+        self.assertNotIn("260005-nry", " ".join(f.name for f in found.findings))
 
 
 class HelpCommandTest(unittest.TestCase):
