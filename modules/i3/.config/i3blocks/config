@@ -37,7 +37,7 @@ color=#B8BB26
 [battery]
 command=$HOME/.config/i3/scripts/battery_status.sh
 markup=pango
-interval=10
+interval=2
 
 
 # --- Network (uncomment if needed) ---
