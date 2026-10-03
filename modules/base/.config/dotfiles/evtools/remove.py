@@ -10,6 +10,7 @@ for good.
 """
 
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -75,6 +76,23 @@ def check_deletable(target: Target) -> info.EntryInfo:
         raise Refusal(f"'{ei.mount_points[0]}' inside the entry is another filesystem "
                       "(mount point), refusing - nothing deleted")
     return ei
+
+
+def confirm_word(description: str, seq: str) -> str:
+    """The word the user must type to confirm: the first word of the description.
+
+    Words are split at "_" (the sidecar's snake_case) and whitespace. A first
+    word is only usable with at least 3 letters or digits; otherwise the first 6
+    characters of the description are used (all of it if shorter). A description
+    with nothing to type at all (empty, or only blanks) falls back to the entry's
+    sequence number, so there is always a word that has to be read and typed.
+    """
+    description = description.strip()
+    words = re.split(r"[_\s]+", description, maxsplit=1)
+    first = words[0]
+    if sum(c.isalnum() for c in first) >= 3:
+        return first
+    return description[:6].strip() or seq
 
 
 def choose_method() -> Method:

@@ -672,12 +672,14 @@ def cmd_remove(args: argparse.Namespace) -> int:
         if not sys.stdin.isatty():
             raise rename.Refusal("needs a terminal to ask on, refusing - nothing deleted")
         method = remove.choose_method()
-        word = ei.entry.seq
+        word = remove.confirm_word(ei.sidecars[0].description if ei.sidecars else "",
+                                   ei.entry.seq)
         print("\n".join(_render_entry_info(ei, home)), file=sys.stderr)
         print(f"\n  >>> {method.banner} <<<\n", file=sys.stderr)
-        print(f"Type {word} to delete this entry and its sidecar (anything else aborts): ",
+        print(f"Type {word} (from the description) to delete this entry and its sidecar "
+              "(anything else aborts): ",
               end="", file=sys.stderr, flush=True)
-        if sys.stdin.readline().strip() != word:
+        if sys.stdin.readline().strip().casefold() != word.casefold():
             raise rename.Refusal("not confirmed - nothing deleted")
         done = remove.delete(target, method)
     except (rename.Refusal, OSError) as e:
@@ -761,7 +763,7 @@ OVERVIEW = [
          "everything new \"some idea\" ai"),
         ("info", "show size, counts, last change and warnings of one entry (picker outside one)",
          "everything info   everything info -a"),
-        ("remove", "delete the entry you're in and its sidecar, after typing its sequence number",
+        ("remove", "delete the entry you're in and its sidecar, after typing a word from its description",
          "everything remove"),
         ("scan", "search the disk for Everything dirs and pick which to save",
          "everything scan --root ~/Main"),
@@ -946,7 +948,8 @@ def build_parser() -> argparse.ArgumentParser:
                        "entry holds - id, sidecar, size, file count, last change, and warnings "
                        "for git repos with uncommitted or unpushed work and for symlinks - "
                        "then deletes the entry dir AND its sidecar, but only after you type "
-                       "the entry's 4-digit sequence number. Files go to the trash (gio trash "
+                       "the first word of its description (the first 6 characters if that word is "
+                       "shorter than 3 letters or digits), in any case. Files go to the trash (gio trash "
                        "or trash-put) if one is installed, else they are deleted for good; "
                        "the prompt says which. Refuses outside an entry, without exactly one "
                        "sidecar, for a symlink or mount point, and without a terminal. Prints "

@@ -2038,14 +2038,14 @@ class RemoveCommandTest(TreeTest):
         self.assertEqual(os.listdir(self.trash), [])
 
     def test_permanent_delete_removes_dir_and_sidecar(self):
-        rc, out, err = self.run_remove("0005\n")
+        rc, out, err = self.run_remove("fire\n")
         self.assertEqual((rc, out), (0, self.ev + "\n"))
         self.assertFalse(os.path.lexists(self.entry))
         self.assertFalse(os.path.lexists(self.sidecar))
         self.assertTrue(os.path.isdir(self.other))
         self.assertTrue(os.path.isfile(os.path.join(self.ev, "260004-nry_other.md")))
         self.assertIn(">>> Will be PERMANENTLY DELETED (no trash tool found) <<<", err)
-        self.assertIn("Type 0005 to delete this entry and its sidecar", err)
+        self.assertIn("Type fire (from the description) to delete this entry and its sidecar", err)
         self.assertTrue(err.endswith("everything remove: deleted: 260005-nry/, "
                                      "260005-nry_fire_drill_@ai.md\n"))
         self.assertEqual(os.listdir(self.trash), [])
@@ -2057,10 +2057,10 @@ class RemoveCommandTest(TreeTest):
                      "Description:  fire_drill", "Tags:         @ai",
                      "(1 file, 1 dir, 0 symlinks)", "Last changed: 20", "Location:     ~/Rem"):
             self.assertIn(text, err)
-        self.assertLess(err.index("Entry:"), err.index("Type 0005"))
+        self.assertLess(err.index("Entry:"), err.index("Type fire"))
 
     def test_trash_moves_both_together(self):
-        rc, out, err = self.run_remove("0005\n", tools=("trash-put",))
+        rc, out, err = self.run_remove("fire\n", tools=("trash-put",))
         self.assertEqual((rc, out), (0, self.ev + "\n"))
         self.assertIn(">>> Will be MOVED TO THE TRASH (restorable) <<<", err)
         self.assertTrue(err.endswith("moved to the trash: 260005-nry/, 260005-nry_fire_drill_@ai.md\n"))
@@ -2080,50 +2080,100 @@ class RemoveCommandTest(TreeTest):
     def test_failing_trash_tool_reports_what_is_left(self):
         with open(os.path.join(self.stub_bin, "trash-put"), "w") as f:
             f.write("#!/bin/sh\necho nope >&2\nexit 1\n")
-        rc, out, err = self.run_remove("0005\n", tools=("trash-put",))
+        rc, out, err = self.run_remove("fire\n", tools=("trash-put",))
         self.assertEqual((rc, out), (1, ""))
         self.assertIn("trash-put failed (nope); removed: nothing; still there: 260005-nry/, "
                       "260005-nry_fire_drill_@ai.md", err)
         self.assert_untouched()
 
     def test_wrong_confirmation_deletes_nothing(self):
-        for answer in ("", "\n", "5", "yes", "0004", "DELETE", "260005", " 0006 "):
+        for answer in ("", "\n", "5", "yes", "0004", "DELETE", "260005", " 0006 ",
+                       "0005", "fir", "fire drill", "drill", "fire_drill", "fire x"):
             rc, out, err = self.run_remove(answer + "\n")
             self.assertEqual((rc, out), (1, ""), answer)
             self.assertTrue(err.endswith("everything remove: not confirmed - nothing deleted\n"))
             self.assert_untouched()
 
     def test_confirmation_ignores_surrounding_space_only(self):
-        rc, _, _ = self.run_remove("  0005  \n")
+        rc, _, _ = self.run_remove("  fire  \n")
         self.assertEqual(rc, 0)
 
+    def test_confirmation_is_case_insensitive(self):
+        rc, _, _ = self.run_remove("FiRe\n")
+        self.assertEqual(rc, 0)
+        self.assertFalse(os.path.lexists(self.entry))
+
+    def test_sequence_number_no_longer_confirms(self):
+        rc, out, err = self.run_remove("0005\n")
+        self.assertEqual((rc, out), (1, ""))
+        self.assertTrue(err.endswith("not confirmed - nothing deleted\n"))
+        self.assert_untouched()
+
+    def test_prompt_shows_the_word_as_written_in_the_sidecar(self):
+        os.rename(self.sidecar, os.path.join(self.ev, "260005-nry_Fire_drill_@ai.md"))
+        self.sidecar = os.path.join(self.ev, "260005-nry_Fire_drill_@ai.md")
+        rc, out, err = self.run_remove("fire\n")
+        self.assertEqual(rc, 0)
+        self.assertIn("Type Fire (from the description)", err)
+
+    def test_short_first_word_uses_first_six_characters(self):
+        os.rename(self.sidecar, os.path.join(self.ev, "260005-nry_go_to_the_store.md"))
+        self.sidecar = os.path.join(self.ev, "260005-nry_go_to_the_store.md")
+        rc, out, err = self.run_remove("go\n")
+        self.assertEqual(rc, 1)
+        self.assertIn("Type go_to_ (from the description)", err)
+        rc, out, err = self.run_remove("GO_TO_\n")
+        self.assertEqual(rc, 0)
+
+    def test_description_shorter_than_six_uses_all_of_it(self):
+        os.rename(self.sidecar, os.path.join(self.ev, "260005-nry_ab.md"))
+        self.sidecar = os.path.join(self.ev, "260005-nry_ab.md")
+        rc, out, err = self.run_remove("ab\n")
+        self.assertEqual(rc, 0)
+        self.assertIn("Type ab (from the description)", err)
+
+    def test_confirm_word_helper(self):
+        w = remove.confirm_word
+        self.assertEqual(w("fire_drill", "0005"), "fire")
+        self.assertEqual(w("Fire_drill", "0005"), "Fire")
+        self.assertEqual(w("backup", "0005"), "backup")
+        self.assertEqual(w("go_to_the_store", "0005"), "go_to_")   # first word < 3 chars
+        self.assertEqual(w("a_longer_one", "0005"), "a_long")
+        self.assertEqual(w("--_fix_it", "0005"), "--_fix")          # only symbols
+        self.assertEqual(w("x-y_rest", "0005"), "x-y_re")           # < 3 letters or digits
+        self.assertEqual(w("ab", "0005"), "ab")                     # fewer than 6 chars
+        self.assertEqual(w("a_b", "0005"), "a_b")
+        self.assertEqual(w("e-mail_setup", "0005"), "e-mail")
+        self.assertEqual(w("", "0005"), "0005")                     # nothing to type
+        self.assertEqual(w("  ", "0005"), "0005")
+
     def test_without_terminal_refuses(self):
-        rc, out, err = self.run_remove("0005\n", tty=False)
+        rc, out, err = self.run_remove("fire\n", tty=False)
         self.assertEqual((rc, out), (1, ""))
         self.assertIn("needs a terminal to ask on, refusing - nothing deleted", err)
         self.assert_untouched()
 
     def test_from_a_subdir_deletes_the_whole_entry(self):
-        rc, out, _ = self.run_remove("0005\n", cwd=os.path.join(self.entry, "sub"))
+        rc, out, _ = self.run_remove("fire\n", cwd=os.path.join(self.entry, "sub"))
         self.assertEqual((rc, out), (0, self.ev + "\n"))
         self.assertFalse(os.path.lexists(self.entry))
 
     def test_not_inside_an_entry(self):
         for cwd in (self.ev, self.home):
-            rc, out, err = self.run_remove("0005\n", cwd=cwd)
+            rc, out, err = self.run_remove("fire\n", cwd=cwd)
             self.assertEqual((rc, out), (1, ""))
             self.assertIn("not inside an entry dir - nothing deleted", err)
         self.assert_untouched()
 
     def test_no_sidecar_or_several_refuse(self):
         os.remove(self.sidecar)
-        rc, _, err = self.run_remove("0005\n")
+        rc, _, err = self.run_remove("fire\n")
         self.assertEqual(rc, 1)
         self.assertIn("'260005-nry' has no sidecar file next to it", err)
         self.assertTrue(os.path.isdir(self.entry))
         for name in ("260005-nry_a.md", "260005-nry_b.md"):
             open(os.path.join(self.ev, name), "w").close()
-        rc, _, err = self.run_remove("0005\n")
+        rc, _, err = self.run_remove("fire\n")
         self.assertEqual(rc, 1)
         self.assertIn("'260005-nry' has 2 sidecar files (260005-nry_a.md, 260005-nry_b.md)", err)
         self.assertTrue(os.path.isdir(self.entry))
@@ -2131,7 +2181,7 @@ class RemoveCommandTest(TreeTest):
     def test_never_deletes_an_outer_entry_instead(self):
         inner = os.path.join(self.entry, "sub", "250001-sub")  # entry-like dir, no sidecar
         os.makedirs(inner)
-        rc, out, err = self.run_remove("0005\n", cwd=inner)
+        rc, out, err = self.run_remove("fire\n", cwd=inner)
         self.assertEqual((rc, out), (1, ""))
         self.assertIn("'250001-sub' has no sidecar", err)
         self.assert_untouched()
@@ -2143,7 +2193,7 @@ class RemoveCommandTest(TreeTest):
         link = os.path.join(self.ev, "260006-lnk")
         os.symlink(real, link)
         open(os.path.join(self.ev, "260006-lnk_linked.md"), "w").close()
-        rc, out, err = self.run_remove("0006\n", cwd=link)
+        rc, out, err = self.run_remove("linked\n", cwd=link)
         self.assertEqual((rc, out), (1, ""))
         self.assertIn("'260006-lnk' is a symlink, refusing to delete through it", err)
         self.assertTrue(os.path.isdir(real))
@@ -2151,7 +2201,7 @@ class RemoveCommandTest(TreeTest):
 
     def test_mount_point_is_refused(self):
         with mock.patch("os.path.ismount", side_effect=lambda p: p == self.entry):
-            rc, out, err = self.run_remove("0005\n")
+            rc, out, err = self.run_remove("fire\n")
         self.assertEqual((rc, out), (1, ""))
         self.assertIn("'260005-nry' is a mount point, refusing", err)
         self.assert_untouched()
@@ -2160,7 +2210,7 @@ class RemoveCommandTest(TreeTest):
         real = info.entry_info
         with mock.patch.object(info, "entry_info", side_effect=lambda p: __import__(
                 "dataclasses").replace(real(p), mount_points=("sub",))):
-            rc, out, err = self.run_remove("0005\n")
+            rc, out, err = self.run_remove("fire\n")
         self.assertEqual((rc, out), (1, ""))
         self.assertIn("'sub' inside the entry is another filesystem", err)
         self.assert_untouched()
@@ -2173,7 +2223,7 @@ class RemoveCommandTest(TreeTest):
                 raise PermissionError(13, "Permission denied")
             return real_unlink(path, *a, **k)
         with mock.patch("os.unlink", side_effect=unlink):
-            rc, out, err = self.run_remove("0005\n")
+            rc, out, err = self.run_remove("fire\n")
         self.assertEqual((rc, out), (1, ""))
         self.assertIn("Permission denied: removed: 260005-nry/; still there: "
                       "260005-nry_fire_drill_@ai.md", err)
@@ -2185,7 +2235,7 @@ class RemoveCommandTest(TreeTest):
         os.makedirs(outside)
         open(os.path.join(outside, "keep.txt"), "w").close()
         os.symlink(outside, os.path.join(self.entry, "link"))
-        rc, _, err = self.run_remove("0005\n")
+        rc, _, err = self.run_remove("fire\n")
         self.assertEqual(rc, 0)
         self.assertIn("1 symlink", err)
         self.assertTrue(os.path.isfile(os.path.join(outside, "keep.txt")))
