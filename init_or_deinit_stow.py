@@ -248,6 +248,55 @@ class StowHelper:
                 os.unlink(expanded)
                 print(f"Removed stale symlink {expanded} (pointed to {target})")
 
+    def find_dangling_links(self, home_modules):
+        """Return (link, target) for dangling symlinks into modules/ in the stow dirs.
+
+        Scan dirs are the $HOME counterparts of the directories in the selected
+        module trees. Each is listed non-recursively (the nested dirs are scan
+        dirs of their own), and symlinked dirs are never entered.
+        """
+        home = os.path.expanduser("~")
+        modules_root = os.path.realpath(MODULES_DIR)
+        scan_dirs = set()
+        for module in home_modules:
+            module_dir = os.path.join(MODULES_DIR, module)
+            for root, _, _ in os.walk(module_dir):
+                rel = os.path.relpath(root, module_dir)
+                scan_dirs.add(os.path.normpath(os.path.join(home, rel)))
+        found = []
+        for scan_dir in sorted(scan_dirs):
+            if os.path.islink(scan_dir) or not os.path.isdir(scan_dir):
+                continue
+            for name in sorted(os.listdir(scan_dir)):
+                path = os.path.join(scan_dir, name)
+                if not os.path.islink(path) or os.path.exists(path):
+                    continue
+                target = os.path.realpath(path)
+                if os.path.commonpath([target, modules_root]) == modules_root:
+                    found.append((path, target))
+        return found
+
+    def prune_dangling_links(self, home_modules):
+        # Must run after the unstow: stow removes nearly everything, so only
+        # leftovers (links to files no longer in any module) are seen here.
+        found = self.find_dangling_links(home_modules)
+        if not found:
+            return
+        print("----------------------------------")
+        print("Dangling symlinks into the dotfiles modules were left behind:")
+        for path, target in found:
+            print(f"  {path} -> {target}")
+        try:
+            answer = input("Remove them? [y/N] ")
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            print("Left them in place.")
+            return
+        for path, _ in found:
+            os.unlink(path)
+            print(f"Removed {path}")
+
     def ensure_non_folding_dirs(self, home_modules):
         for module in home_modules:
             for dir_path in NON_FOLDING_DIRS.get(module, []):
@@ -305,6 +354,7 @@ class StowHelper:
         if self.args.restow:
             print("--- Unstowing ---")
             self.stow_all(home_modules, sys_modules, deinit=True)
+            self.prune_dangling_links(home_modules)
             print("--- Stowing ---")
             self.remove_stale_links(home_modules)
             self.ensure_non_folding_dirs(home_modules)
@@ -314,6 +364,8 @@ class StowHelper:
                 self.remove_stale_links(home_modules)
                 self.ensure_non_folding_dirs(home_modules)
             self.stow_all(home_modules, sys_modules, deinit=self.args.deinit)
+            if self.args.deinit:
+                self.prune_dangling_links(home_modules)
 
         if "base" in home_modules:
             self.manage_bashrc(self.args.deinit)
