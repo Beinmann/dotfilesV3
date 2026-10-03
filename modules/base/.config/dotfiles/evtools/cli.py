@@ -689,6 +689,57 @@ def cmd_remove(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_info(args: argparse.Namespace) -> int:
+    """Print the summary of the entry you're in, or of one picked with fzf."""
+    prog = "everything info"
+    home = os.path.expanduser("~")
+    try:
+        path = remove.find_entry(_current_dir(), for_delete=False).entry_dir
+    except remove.NotInEntry:
+        path = _pick_entry(args, prog, home)
+        if path is None:
+            return 1
+    except rename.Refusal as e:
+        print(f"{prog}: {e.args[0].replace(' - nothing deleted', '')}", file=sys.stderr)
+        return 1
+    print("\n".join(_render_entry_info(info.entry_info(path), home)))
+    return 0
+
+
+def _pick_entry(args: argparse.Namespace, prog: str, home: str) -> str | None:
+    """Let the user pick an entry dir with fzf; None after a message or a cancel."""
+    if shutil.which("fzf") is None:
+        print(f"{prog}: not inside an entry dir and fzf not found to pick one - cd into an "
+              "entry, or install fzf", file=sys.stderr)
+        return None
+    if args.all:
+        dirs = _saved_dirs(prog)
+    else:
+        bookmark = discovery.bookmark_dir()
+        if bookmark is None:
+            print(f"{prog}: bashmark 'e' is not set to a valid dir (set it with: s e)",
+                  file=sys.stderr)
+        dirs = [bookmark] if bookmark else None
+    if dirs is None:
+        return None
+    rows = []
+    for d in dirs:
+        sidecars = entries.sidecars_by_entry(d)
+        for e in entries.list_entries(d):
+            s = sidecars.get(e.name, [None])[0]
+            label = f"{e.name}  {s.description if s else ''}  " \
+                    f"{' '.join('@' + t for t in s.tags) if s else ''}".rstrip()
+            if args.all:
+                label += f"  [{_tilde(d, home)}]"
+            rows.append((e.id, e.name, d, label, os.path.join(d, e.name)))
+    if not rows:
+        print(f"{prog}: no entries found", file=sys.stderr)
+        return None
+    rows.sort(key=lambda r: (r[0], r[1], r[2]))
+    picked = prompt.choose(prog, [(r[3], r[4]) for r in rows], "info for which entry?")
+    return picked[0] if picked else None
+
+
 # Hand-written on purpose (ticket 020); a test fails if a subcommand or an
 # Everything wrapper in functions.d/aliases.d is missing here.
 # (group title, [(name, one-line description, example), ...])
@@ -708,6 +759,8 @@ OVERVIEW = [
          "everything check --all-levels"),
         ("new", "create the next entry dir + sidecar and print its path",
          "everything new \"some idea\" ai"),
+        ("info", "show size, counts, last change and warnings of one entry (picker outside one)",
+         "everything info   everything info -a"),
         ("remove", "delete the entry you're in and its sidecar, after typing its sequence number",
          "everything remove"),
         ("scan", "search the disk for Everything dirs and pick which to save",
@@ -875,6 +928,18 @@ def build_parser() -> argparse.ArgumentParser:
                         "\"everything\" in it, without asking")
     p.add_argument("--label", default="everything new", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_new)
+
+    p = sub.add_parser("info", help="show read-only stats for one entry",
+                       description="Print what the entry you're in holds: id, sidecar, "
+                       "description and tags, size, file/dir/symlink counts, last change, and "
+                       "warnings (git repos with uncommitted or unpushed work, symlinks) - the "
+                       "same summary `everything remove` shows, without any delete prompt. "
+                       "Outside an entry, pick one with fzf from the \"e\" bashmark dir (-a: "
+                       "from every saved Everything dir). Read-only. Not `stats`, which "
+                       "aggregates across dirs.")
+    p.add_argument("-a", "--all", action="store_true",
+                   help="outside an entry, pick from every saved Everything dir. " + LIST_NOTE)
+    p.set_defaults(func=cmd_info)
 
     p = sub.add_parser("remove", help="delete the entry you're in and its sidecar",
                        description="Run inside an entry dir (or below it). Shows what the "
