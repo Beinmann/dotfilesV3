@@ -61,6 +61,22 @@ class BaseSettingsTest(unittest.TestCase):
                            env=env, capture_output=True, text=True)
         self.assertEqual(r.stdout.strip(), r"\u@\h:\w\$")
 
+    def test_duplicate_and_machine_specific_aliases_are_gone(self):
+        out = self.bash(f". {ALIASES}; alias")
+        names = {line.split("=")[0][len("alias "):] for line in out.splitlines()}
+        for kept in ("reloadbash", ":r", "myTimer", "myTimerLog", "myNautilusAndExit"):
+            self.assertIn(kept, names)
+        for gone in ("reloadbashrc", "notify", "myNotify", "brown_noise",
+                     "mainVenvActivate"):
+            self.assertNotIn(gone, names)
+
+    def test_ram_alias_only_when_script_exists(self):
+        self.assertNotIn("alias ram=", self.bash(f". {ALIASES}; alias"))
+        script = os.path.join(self.home, "Main/Scripts/RAM_Script_Python")
+        os.makedirs(script)
+        open(os.path.join(script, "main.py"), "w").close()
+        self.assertIn("alias ram=", self.bash(f". {ALIASES}; alias"))
+
     def test_no_debian_leftovers(self):
         with open(SETTINGS) as f:
             text = f.read()
