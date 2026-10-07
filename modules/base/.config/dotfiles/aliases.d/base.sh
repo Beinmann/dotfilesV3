@@ -1,6 +1,8 @@
 #!/bin/sh
 
 alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
 alias cds='cds() { cd "$1" && ls; }; cds'
 alias reloadbash="source ~/.bashrc"
 alias :r=reloadbash

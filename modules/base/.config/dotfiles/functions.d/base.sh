@@ -4,6 +4,16 @@
 ###################### Most useful things ######################
 
 
+# Go up N directories (default 1): `up 3` is `cd ../../..`
+up() {
+  local path="" i
+  for ((i = 0; i < ${1:-1}; i++)); do
+    path+="../"
+  done
+  cd "$path"
+}
+
+
 # Fuzzy-pick a bashmark (from ~/.sdirs) and open nvim there
 proj() {
   if [ "$#" -ge 2 ]; then
