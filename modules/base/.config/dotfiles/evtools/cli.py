@@ -781,6 +781,7 @@ OVERVIEW = [
         ("gel", "like ge, but searches the current dir", "gel fire"),
         ("cde", "cd to one Everything dir, via text match or fzf", "cde archive"),
         ("lse", "alias for `everything entries`", "lse -a"),
+        ("e", "alias for `everything` (not the \"e\" bashmark)", "e list   e new \"some idea\""),
         ("everything", "the command itself; `everything remove` also cds to the parent dir",
          "everything remove"),
         ("mynew", "create the next entry in the current Everything dir and cd into it",
@@ -998,7 +999,7 @@ def build_parser() -> argparse.ArgumentParser:
                        "(default vim) on the part of the sidecar name after the entry id "
                        "and before the extension, e.g. \"working_on_dotfiles_@ai\", and "
                        "rename the sidecar to the edited text. The name is checked first "
-                       "(letters, digits, _ and _@tags, at most 80 characters, no existing "
+                       f"(letters, digits, _ and _@tags, at most {rename.MAX_LEN} characters, no existing "
                        "file); on a problem the editor reopens with the error shown. An "
                        "editor error (:cq), an empty line or no change renames nothing and "
                        "exits 1.")
