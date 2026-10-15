@@ -1879,7 +1879,7 @@ class RenameCommandTest(TreeTest):
             ("trail_", "leading, trailing or doubled _"), ("a__b", "leading, trailing or doubled _"),
             ("a_@", "malformed tag"), ("a_@@x", "malformed tag"), ("a_b@c", "malformed tag"),
             ("@ai_desc", "start with a description"), ("a_@ai_more", "put all tags last"),
-            ("x" * 81, "81 characters, at most 80"), ("other", None),
+            ("x" * (rename.MAX_LEN + 1), f"{rename.MAX_LEN + 1} characters, at most {rename.MAX_LEN}"), ("other", None),
         ]
         for text, message in cases[:-1]:
             # first edit is rejected, the second saves the same text again: cancelled
@@ -1898,9 +1898,12 @@ class RenameCommandTest(TreeTest):
         self.assertIn("260005-nry_good_name.md", os.listdir(self.ev))
 
     def test_max_length_is_accepted(self):
-        rc, _, _ = self.run_rename("x" * 80)
+        self.assertEqual(rename.MAX_LEN, 120)
+        rc, _, _ = self.run_rename("x" * 120)
         self.assertEqual(rc, 0)
-        self.assertIn("260005-nry_" + "x" * 80 + ".md", os.listdir(self.ev))
+        name = "260005-nry_" + "x" * 120 + ".md"
+        self.assertIn(name, os.listdir(self.ev))
+        self.assertLess(len(name.encode()), 255)
 
     def test_existing_target_is_rejected_and_never_overwritten(self):
         # a dir (or dangling symlink) with that name isn't a sidecar, but blocks the name
