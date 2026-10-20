@@ -916,7 +916,7 @@ def build_parser() -> argparse.ArgumentParser:
                        "\".mynew-suffix\". Never overwrites an entry or sidecar. The shell function "
                        "`everything` then cds there. The description may carry the tags too: "
                        "\"name_@tag1_@tag2\".")
-    p.add_argument("description", help="free text, turned into lower_snake_case; "
+    p.add_argument("description", help="free text, turned into snake_case (case is kept); "
                    "\"name_@tag1_@tag2\" also sets tags")
     p.add_argument("tags", nargs="*", metavar="tag", help="tags, with or without a leading @")
     p.add_argument("--dir", default=".", help="the Everything dir (default: current dir)")

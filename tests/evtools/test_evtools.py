@@ -1044,9 +1044,9 @@ class NewCommandTest(TreeTest):
         self.assertIn(f"no suffix configured for {self.ev} yet.", err)
         self.assertIn("leave blank for none): ", err)
         self.assertTrue(err.endswith("created '260002-nry/' with sidecar "
-                                     "'260002-nry_fire_drill.md'\n"))
+                                     "'260002-nry_Fire_drill.md'\n"))
         self.assertEqual(self.names(), [".mynew-suffix", "260001-gel", "260002-nry",
-                                        "260002-nry_fire_drill.md"])
+                                        "260002-nry_Fire_drill.md"])
         with open(os.path.join(self.ev, ".mynew-suffix")) as f:
             self.assertEqual(f.read(), "nry")
         # second time: no question, stdin isn't read
@@ -1086,10 +1086,17 @@ class NewCommandTest(TreeTest):
         self.suffix_file("")
         rc, _, err = self.run_new("  Fire Drill (v2)! Ärger ", "ai", "@x", "@@y")
         self.assertEqual(rc, 0)
-        self.assertIn("260002_fire_drill_v2_rger_@ai_@x_@@y.md", self.names())
+        self.assertIn("260002_Fire_Drill_v2_rger_@ai_@x_@@y.md", self.names())
         self.assertNotIn("note:", err)
-        parsed = entries.parse_sidecar("260002_fire_drill_v2_rger_@ai_@x_@@y.md")
+        parsed = entries.parse_sidecar("260002_Fire_Drill_v2_rger_@ai_@x_@@y.md")
         self.assertEqual(parsed.tags, ("ai", "x", "@y"))
+
+    def test_description_keeps_case(self):
+        self.mk("260001")
+        self.suffix_file("")
+        rc, _, _ = self.run_new("some_string_UPPER")
+        self.assertEqual(rc, 0)
+        self.assertIn("260002_some_string_UPPER.md", self.names())
 
     def test_warns_about_tag_without_at(self):
         self.mk("260001")
@@ -1164,7 +1171,7 @@ class NewCommandTest(TreeTest):
         self.suffix_file("nry")
         rc, _, _ = self.run_new("Test Name_@a", "@b", "c")
         self.assertEqual(rc, 0)
-        self.assertIn("260001-nry_test_name_@a_@b_@c.md", self.names())
+        self.assertIn("260001-nry_Test_Name_@a_@b_@c.md", self.names())
 
     def test_malformed_tags_inside_the_description_refused(self):
         self.suffix_file("nry")
@@ -1197,7 +1204,7 @@ class NewCommandTest(TreeTest):
                          res.stderr)
         self.assertIn("Suffix to use for new entries here", res.stderr)
         self.assertTrue(res.stderr.endswith(f"everything new: created '{entry}/' with sidecar "
-                                            f"'{entry}_hello_world_@ai.md'\n"))
+                                            f"'{entry}_Hello_World_@ai.md'\n"))
 
     def test_everything_new_failure_stays_put(self):
         open(os.path.join(self.ev, "notes.txt"), "w").close()
@@ -1222,7 +1229,7 @@ class NewCommandTest(TreeTest):
         rc, out, err = self.run_new("First idea", "ai", stdin="nry\n")
         self.assertEqual((rc, out), (0, os.path.join(self.ev, "260001-nry") + "\n"))
         self.assertNotIn("year prefix rolled over", err)
-        self.assertEqual(self.names(), [".mynew-suffix", "260001-nry", "260001-nry_first_idea_@ai.md"])
+        self.assertEqual(self.names(), [".mynew-suffix", "260001-nry", "260001-nry_First_idea_@ai.md"])
 
     def test_dir_with_only_a_suffix_file_counts_as_empty(self):
         self.suffix_file("nry")

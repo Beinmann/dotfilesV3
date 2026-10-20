@@ -42,8 +42,8 @@ def current_year() -> str:
 
 
 def snake(description: str) -> str:
-    """"Fire Drill (v2)!" -> "fire_drill_v2", as mynew always did."""
-    return re.sub(r"[^a-z0-9]+", "_", description.lower()).strip("_")
+    """"Fire Drill (v2)!" -> "Fire_Drill_v2"; the case is kept."""
+    return re.sub(r"[^A-Za-z0-9]+", "_", description).strip("_")
 
 
 TAG_RE = re.compile(r"[A-Za-z0-9-]+")  # a tag written inside the description argument
