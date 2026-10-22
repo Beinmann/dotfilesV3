@@ -28,7 +28,8 @@ class DevboxSwitcherTest(unittest.TestCase):
         shutil.copy(SCRIPT, self.script)
         self.stub("i3_switch_workspace.sh", 'echo "switch $*" >> "$LOG"')
         self.set_workspaces(["10", "dev:beta", "20", "dev:alpha"])
-        self.stub("fzf", 'head -n1')  # picks the first line of stdin
+        self.registry = os.path.join(self.dir, "state", "devbox", "registry.tsv")
+        self.stub("fzf", 'tee "$LOG.fzf" | head -n1')  # picks the first row; keeps the list
         self.stub("tilix", 'echo "tilix $*" >> "$LOG"')
         self.stub("notify-send", 'echo "notify $*" >> "$LOG"')
 
@@ -46,7 +47,8 @@ class DevboxSwitcherTest(unittest.TestCase):
                             f'[ "$2" = get_version ] && exit 0\ncat {data}')
 
     def run_script(self, *args):
-        env = {"PATH": f"{self.dir}:/usr/bin:/bin", "LOG": self.log}
+        env = {"PATH": f"{self.dir}:/usr/bin:/bin", "LOG": self.log,
+               "HOME": "/h", "XDG_STATE_HOME": os.path.join(self.dir, "state")}
         r = subprocess.run(["bash", self.script, *args], env=env,
                            capture_output=True, text=True)
         calls = ""
@@ -59,6 +61,33 @@ class DevboxSwitcherTest(unittest.TestCase):
         r, calls = self.run_script("--pick")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(calls, "switch dev:alpha\n")
+
+    def write_registry(self, *lines):
+        os.makedirs(os.path.dirname(self.registry), exist_ok=True)
+        with open(self.registry, "w") as f:
+            f.write("".join("\t".join(l) + "\n" for l in lines))
+
+    def fzf_rows(self):
+        with open(self.log + ".fzf") as f:
+            return f.read().splitlines()
+
+    def test_rows_show_path_name_and_title_from_registry(self):
+        self.write_registry(
+            ("alpha", "/h/proj/box", "Alpha box", "t"),
+            ("beta", "-", "Remote thing", "t", "manual"),
+            ("gone", "/h/x", "Not open", "t"))
+        self.run_script("--pick")
+        self.assertEqual(self.fzf_rows(),
+                         ["alpha\t~/proj/box:alpha  Alpha box", "beta\tbeta  Remote thing"])
+
+    def test_registry_title_equal_to_name_is_not_repeated_and_later_line_wins(self):
+        self.write_registry(("alpha", "/old", "alpha", "t"), ("alpha", "/other/dir", "alpha", "t"))
+        self.run_script("--pick")
+        self.assertEqual(self.fzf_rows()[0], "alpha\t/other/dir:alpha")
+
+    def test_missing_registry_shows_plain_names(self):
+        self.run_script("--pick")
+        self.assertEqual(self.fzf_rows(), ["alpha\talpha", "beta\tbeta"])
 
     def test_pick_cancelled_does_nothing(self):
         self.stub("fzf", "exit 130")
