@@ -1,2 +1,8 @@
 #!/bin/sh
-feh --bg-fill $HOME/Main/Data/pexels-dids-3306986.jpg
+. "$HOME/Main/Scripts/Helper_Scripts/wallpaper.sh"
+
+if [ -f "$WALLPAPER" ]; then
+    feh --bg-fill "$WALLPAPER"
+else
+    xsetroot -solid "#$FALLBACK_COLOR"
+fi
