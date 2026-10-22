@@ -20,7 +20,9 @@
 #
 # Also records the box in the DevBox registry (same file and columns as
 # bash_in_dev_container.sh, plus a fifth column "manual"), with path "-":
-# nothing can start it again. Nothing is written into the current directory.
+# nothing can start it again. When it asks for name and title in a terminal
+# it also offers to record the current directory as the path (default no).
+# Nothing is written into the current directory.
 set -euo pipefail
 
 rofi_mode=0; kind=devbox; prefix="dev:"; regname=registry.tsv
@@ -46,7 +48,7 @@ have_i3 || fail "i3 is not reachable (i3-msg -t get_version failed)."
 
 valid='^[A-Za-z0-9_-]{1,16}$'
 name="${1:-}"; title="${2:-}"
-known=0
+known=0; dir=-
 if [[ $rofi_mode == 1 ]]; then
   command -v rofi >/dev/null 2>&1 || fail "rofi not found."
   workspaces=$(i3-msg -t get_workspaces)
@@ -70,6 +72,8 @@ elif ! [[ "$name" =~ $valid ]]; then
     echo "  Use 1-16 letters, digits, - or _." >&2
   done
   read -rp "Longer title (optional): " title
+  read -rp "Add current directory ($PWD)? [y/N] " add_dir
+  [[ "$add_dir" =~ ^[Yy] ]] && dir="${PWD//[$'\t\r\n']/ }"
 fi
 title="${title//$'\t'/ }"; : "${title:=$name}"
 ws="$prefix$name"
@@ -86,7 +90,7 @@ if [[ $known == 0 ]]; then
   mkdir -p "$(dirname "$registry")"
   tmp=$(mktemp "$registry.XXXXXX")
   { awk -F'\t' -v n="$name" '$1 != n' "$registry" 2>/dev/null || true
-    printf '%s\t-\t%s\t%s\tmanual\n' "$name" "$title" "$(date -Is)"; } > "$tmp"
+    printf '%s\t%s\t%s\t%s\tmanual\n' "$name" "$dir" "$title" "$(date -Is)"; } > "$tmp"
   mv "$tmp" "$registry"
 fi
 

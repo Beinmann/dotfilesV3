@@ -157,12 +157,33 @@ class WsMarkTest(unittest.TestCase):
             return [l.rstrip("\n").split("\t") for l in f]
 
     def test_prompts_registers_and_moves(self):
-        code, out = self.run_script(answers="alpha\nMy box\n")
+        code, out = self.run_script(answers="alpha\nMy box\n\n")
         self.assertEqual(code, 0, out)
         self.assertIn('move container to workspace "dev:alpha"', self.i3_calls())
         (name, path, title, _when, kind), = self.registry_lines()
         self.assertEqual((name, path, title, kind), ("alpha", "-", "My box", "manual"))
         self.assertEqual(os.listdir(self.cwd), [])
+
+    def test_prompt_yes_records_current_directory(self):
+        code, out = self.run_script(answers="alpha\nMy box\ny\n")
+        self.assertEqual(code, 0, out)
+        self.assertIn("[y/N]", out)
+        (name, path, title, _when, kind), = self.registry_lines()
+        self.assertEqual((name, path, title), ("alpha", os.path.realpath(self.cwd), "My box"))
+
+    def test_prompt_no_keeps_dash_and_ws_asks_too(self):
+        self.assertEqual(self.run_script(answers="alpha\nMy box\nn\n")[0], 0)
+        self.assertEqual(self.registry_lines()[0][1], "-")
+        code, out = self.run_script("--ws", answers="docs\nDocs\ny\n")
+        self.assertEqual(code, 0, out)
+        with open(os.path.join(self.state, "devbox", "named_workspaces.tsv")) as f:
+            self.assertEqual(f.read().split("\t")[1], os.path.realpath(self.cwd))
+
+    def test_args_never_ask_about_directory(self):
+        code, out = self.run_script("alpha", "one")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("directory", out)
+        self.assertEqual(self.registry_lines()[0][1], "-")
 
     def test_args_skip_prompts_and_name_replaces_old_entry(self):
         self.assertEqual(self.run_script("alpha", "one")[0], 0)
@@ -178,7 +199,7 @@ class WsMarkTest(unittest.TestCase):
         self.assertEqual([l[0] for l in self.registry_lines()], ["beta", "alpha"])
 
     def test_invalid_name_argument_is_asked_again(self):
-        code, out = self.run_script("bad name", answers="ok\n\n")
+        code, out = self.run_script("bad name", answers="ok\n\n\n")
         self.assertEqual(code, 0, out)
         self.assertIn("1-16 letters", out)
         self.assertEqual(self.registry_lines()[0][2], "ok")  # title defaults to name
