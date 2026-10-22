@@ -35,7 +35,7 @@ bash Scripts/Initialization_and_Saving_State_Scripts/apt_install_programs.sh
 git submodule update --init --recursive
 ```
 
-This pulls in the nvim config and the RAM monitor script.
+This pulls in the nvim config.
 
 ### Guided setup (recommended)
 
@@ -110,7 +110,6 @@ See `claude_settings/README.md` for how defaults and enforced settings differ.
 | `i3` | The whole desktop/session setup: i3 configuration with the i3blocks status bar, workspace scripts and in-repo status bar blocks (volume, CPU, memory, battery), plus sway, dunst, X resources and keybindings (`.Xresources`, `.xbindkeysrc`), the custom XKB layout, startup/lock/wallpaper scripts, `myScreenshot` and the wallpaper. Leave it out on headless machines. |
 | `nvim` | Neovim configuration (submodule pointing to a separate nvim config repo). |
 | `vim` | Vim configuration for when neovim isn't available. |
-| `scripts` | Miscellaneous helper scripts (RAM monitor etc.) managed as submodules. |
 | `services` | Systemd user services. |
 | `ai` | AI tooling — Claude usage monitor script, notification hook script and shell alias (Claude settings: see `claude_settings/`). Opt-in: only activate on machines where you use Claude. |
 | `laptop_adaptations` | Laptop-specific tweaks (touchpad natural scrolling, tapping). Opt-in: activate on laptops alongside `base` (and `i3` on a laptop desktop). |
