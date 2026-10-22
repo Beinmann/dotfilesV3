@@ -1,4 +1,4 @@
-"""Tests for devbox-mark (needs a pty: the script refuses without a terminal).
+"""Tests for ws-mark (needs a pty: the script refuses without a terminal).
 
 Fake i3-msg on PATH serves a workspace list and logs the commands it gets.
 
@@ -13,10 +13,10 @@ import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SCRIPT = os.path.join(REPO, "modules", "i3", ".local", "bin", "devbox-mark")
+SCRIPT = os.path.join(REPO, "modules", "i3", ".local", "bin", "ws-mark")
 
 
-class DevboxMarkTest(unittest.TestCase):
+class WsMarkTest(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)

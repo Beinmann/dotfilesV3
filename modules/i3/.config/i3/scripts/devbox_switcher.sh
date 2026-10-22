@@ -3,14 +3,14 @@
 #
 # Named workspaces ("ws:<name>", registry named_workspaces.tsv next to the
 # devbox registry, same columns) are the general form: any window put there
-# with devbox-mark --ws, e.g. a browser window to keep around.
+# with ws-mark --ws, e.g. a browser window to keep around.
 #
 # bash_in_dev_container.sh (DevBox repo) moves its terminal to workspace
 # "dev:<name>"; i3 drops a workspace once its last window closes, so the
 # workspaces with that prefix are exactly the running devboxes.
 #
 # Each row is "path:name  title", taken from the DevBox registry (see
-# bash_in_dev_container.sh, devbox-mark) for the devboxes open right now, so
+# bash_in_dev_container.sh, ws-mark) for the devboxes open right now, so
 # there is more to search for; boxes without a registry line show their name.
 #
 # Bound to a hotkey: checks i3 and the list, then opens a small floating
@@ -33,7 +33,7 @@ fail() {
 have_i3() { command -v i3-msg >/dev/null 2>&1 && i3-msg -t get_version >/dev/null 2>&1; }
 
 # Full workspace names of the open devboxes ("dev:<name>") and then of the
-# open named workspaces ("ws:<name>", see devbox-mark --ws).
+# open named workspaces ("ws:<name>", see ws-mark --ws).
 running_workspaces() {
   local names p
   names=$(i3-msg -t get_workspaces | jq -r '.[].name')
@@ -43,7 +43,7 @@ running_workspaces() {
 }
 
 # Rows "workspace<TAB>display" for the open devboxes and named workspaces. A
-# later registry line for a name wins; path "-" (devbox-mark) means no path.
+# later registry line for a name wins; path "-" (ws-mark) means no path.
 picker_rows() {
   running_workspaces | awk -F'\t' -v home="$HOME" -v reg="$registry" -v wsreg="$ws_registry" \
       -v dp="$prefix" -v wp="$ws_prefix" '

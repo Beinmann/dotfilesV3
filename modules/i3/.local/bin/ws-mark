@@ -3,9 +3,9 @@
 # "dev:<name>" so the devbox switcher ($mod+g) finds it. For a terminal that
 # is not started by the DevBox script, e.g. one you then ssh from.
 #
-# Usage: devbox-mark [name [title]]   (asks for what is missing)
-#        devbox-mark --rofi           (any focused window, no terminal needed)
-#        devbox-mark --ws [...]       (named workspace "ws:<name>" instead)
+# Usage: ws-mark [name [title]]   (asks for what is missing)
+#        ws-mark --rofi           (any focused window, no terminal needed)
+#        ws-mark --ws [...]       (named workspace "ws:<name>" instead)
 #
 # --ws is the general form for things that are not devboxes (a browser
 # window, a program to keep open once): workspace "ws:<name>", registry
@@ -33,7 +33,7 @@ while [[ "${1:-}" == --rofi || "${1:-}" == --ws ]]; do
 done
 
 fail() {
-  echo "devbox-mark: $1" >&2
+  echo "ws-mark: $1" >&2
   [[ $rofi_mode == 1 ]] && { notify-send "Mark window" "$1" 2>/dev/null || true; }
   exit 1
 }
@@ -63,7 +63,7 @@ if [[ $rofi_mode == 1 ]]; then
     title=$(rofi -dmenu -p "title for $name (optional)" < /dev/null) || exit 0
   fi
 elif ! [[ "$name" =~ $valid ]]; then
-  [[ -z "$name" ]] || echo "devbox-mark: use 1-16 letters, digits, - or _." >&2
+  [[ -z "$name" ]] || echo "ws-mark: use 1-16 letters, digits, - or _." >&2
   while :; do
     read -rp "Short name (i3 workspace ${prefix}<name>): " name
     [[ "$name" =~ $valid ]] && break
@@ -78,7 +78,7 @@ ws="$prefix$name"
 workspaces=$(i3-msg -t get_workspaces)
 if [[ $rofi_mode == 0 ]] && jq -e --arg n "$ws" 'any(.[]; .name == $n)' <<< "$workspaces" >/dev/null &&
    ! jq -e --arg n "$ws" 'any(.[]; .name == $n and .focused)' <<< "$workspaces" >/dev/null; then
-  echo "devbox-mark: workspace $ws is already open for another $kind." >&2
+  echo "ws-mark: workspace $ws is already open for another $kind." >&2
   exit 1
 fi
 
