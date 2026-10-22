@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mark the current window as a devbox by hand: move it to the i3 workspace
-# "dev:<name>" so the devbox switcher ($mod+g) finds it. For a terminal that
+# "dev:<name>" so the devbox switcher ($mod+o) finds it. For a terminal that
 # is not started by the DevBox script, e.g. one you then ssh from.
 #
 # Usage: ws-mark [name [title]]   (asks for what is missing)

@@ -216,7 +216,7 @@ bindsym $mod+Ctrl+Shift+5 move container to workspace $ws5a
 bindsym $mod+y exec --no-startup-id $scripts/i3_swap_current_workspace_order.sh
 
 # Jump to a running devbox (workspace "dev:<name>", see devbox_switcher.sh)
-bindsym $mod+g exec --no-startup-id $scripts/devbox_switcher.sh
+bindsym $mod+o exec --no-startup-id $scripts/devbox_switcher.sh
 
 # Go to previous workspace
 bindsym $mod+Tab exec --no-startup-id $scripts/i3_goto_prev_workspace.sh
