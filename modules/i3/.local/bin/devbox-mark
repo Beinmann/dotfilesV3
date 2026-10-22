@@ -5,6 +5,12 @@
 #
 # Usage: devbox-mark [name [title]]   (asks for what is missing)
 #        devbox-mark --rofi           (any focused window, no terminal needed)
+#        devbox-mark --ws [...]       (named workspace "ws:<name>" instead)
+#
+# --ws is the general form for things that are not devboxes (a browser
+# window, a program to keep open once): workspace "ws:<name>", registry
+# named_workspaces.tsv next to the devbox registry (same columns). The
+# switcher lists both kinds. --ws combines with --rofi.
 #
 # --rofi (the "Mark this window as devbox" launcher entry) lists the open
 # devboxes, then the registry ones that are not open; typing any other valid
@@ -17,16 +23,22 @@
 # nothing can start it again. Nothing is written into the current directory.
 set -euo pipefail
 
-rofi_mode=0
-[[ "${1:-}" == "--rofi" ]] && { rofi_mode=1; shift; }
+rofi_mode=0; kind=devbox; prefix="dev:"; regname=registry.tsv
+while [[ "${1:-}" == --rofi || "${1:-}" == --ws ]]; do
+  case "$1" in
+    --rofi) rofi_mode=1 ;;
+    --ws) kind="named workspace"; prefix="ws:"; regname=named_workspaces.tsv ;;
+  esac
+  shift
+done
 
 fail() {
   echo "devbox-mark: $1" >&2
-  [[ $rofi_mode == 1 ]] && { notify-send "Devbox mark" "$1" 2>/dev/null || true; }
+  [[ $rofi_mode == 1 ]] && { notify-send "Mark window" "$1" 2>/dev/null || true; }
   exit 1
 }
 
-registry="${XDG_STATE_HOME:-$HOME/.local/state}/devbox/registry.tsv"
+registry="${XDG_STATE_HOME:-$HOME/.local/state}/devbox/$regname"
 
 have_i3() { command -v i3-msg >/dev/null 2>&1 && i3-msg -t get_version >/dev/null 2>&1; }
 have_i3 || fail "i3 is not reachable (i3-msg -t get_version failed)."
@@ -38,11 +50,11 @@ known=0
 if [[ $rofi_mode == 1 ]]; then
   command -v rofi >/dev/null 2>&1 || fail "rofi not found."
   workspaces=$(i3-msg -t get_workspaces)
-  running=$(jq -r '.[].name | select(startswith("dev:")) | .[4:]' <<< "$workspaces" | sort)
+  running=$(jq -r --arg p "$prefix" '.[].name | select(startswith($p)) | .[($p | length):]' <<< "$workspaces" | sort)
   registered=$(cut -f1 "$registry" 2>/dev/null | awk 'NF && !seen[$0]++' || true)
   names=$({ printf '%s\n' "$running"; printf '%s\n' "$registered"; } | awk 'NF && !seen[$0]++')
-  # Running devboxes first, then the registry ones that are not open.
-  choice=$(rofi -dmenu -i -p 'devbox (new name: type it)' <<< "$names") || exit 0
+  # Open ones first, then the registry ones that are not open.
+  choice=$(rofi -dmenu -i -p "$kind (new name: type it)" <<< "$names") || exit 0
   name="${choice//[$'\t\r\n']/}"
   [[ "$name" =~ $valid ]] || fail "Use 1-16 letters, digits, - or _ (got \"$name\")."
   if grep -qxF -- "$name" <<< "$names"; then
@@ -53,20 +65,20 @@ if [[ $rofi_mode == 1 ]]; then
 elif ! [[ "$name" =~ $valid ]]; then
   [[ -z "$name" ]] || echo "devbox-mark: use 1-16 letters, digits, - or _." >&2
   while :; do
-    read -rp "Short name (i3 workspace dev:<name>): " name
+    read -rp "Short name (i3 workspace ${prefix}<name>): " name
     [[ "$name" =~ $valid ]] && break
     echo "  Use 1-16 letters, digits, - or _." >&2
   done
   read -rp "Longer title (optional): " title
 fi
 title="${title//$'\t'/ }"; : "${title:=$name}"
-ws="dev:$name"
+ws="$prefix$name"
 
 # Already on that workspace is fine; open elsewhere means the name is taken.
 workspaces=$(i3-msg -t get_workspaces)
 if [[ $rofi_mode == 0 ]] && jq -e --arg n "$ws" 'any(.[]; .name == $n)' <<< "$workspaces" >/dev/null &&
    ! jq -e --arg n "$ws" 'any(.[]; .name == $n and .focused)' <<< "$workspaces" >/dev/null; then
-  echo "devbox-mark: workspace $ws is already open for another devbox." >&2
+  echo "devbox-mark: workspace $ws is already open for another $kind." >&2
   exit 1
 fi
 
@@ -79,4 +91,4 @@ if [[ $known == 0 ]]; then
 fi
 
 i3-msg "move container to workspace \"$ws\"; workspace \"$ws\"" >/dev/null
-echo "Window is now devbox \"$name\" (workspace $ws)."
+echo "Window is now $kind \"$name\" (workspace $ws)."

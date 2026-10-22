@@ -78,16 +78,16 @@ class DevboxSwitcherTest(unittest.TestCase):
             ("gone", "/h/x", "Not open", "t"))
         self.run_script("--pick")
         self.assertEqual(self.fzf_rows(),
-                         ["alpha\t~/proj/box:alpha  Alpha box", "beta\tbeta  Remote thing"])
+                         ["dev:alpha\t~/proj/box:alpha  Alpha box", "dev:beta\tbeta  Remote thing"])
 
     def test_registry_title_equal_to_name_is_not_repeated_and_later_line_wins(self):
         self.write_registry(("alpha", "/old", "alpha", "t"), ("alpha", "/other/dir", "alpha", "t"))
         self.run_script("--pick")
-        self.assertEqual(self.fzf_rows()[0], "alpha\t/other/dir:alpha")
+        self.assertEqual(self.fzf_rows()[0], "dev:alpha\t/other/dir:alpha")
 
     def test_missing_registry_shows_plain_names(self):
         self.run_script("--pick")
-        self.assertEqual(self.fzf_rows(), ["alpha\talpha", "beta\tbeta"])
+        self.assertEqual(self.fzf_rows(), ["dev:alpha\talpha", "dev:beta\tbeta"])
 
     def test_pick_cancelled_does_nothing(self):
         self.stub("fzf", "exit 130")
@@ -106,7 +106,7 @@ class DevboxSwitcherTest(unittest.TestCase):
         for args in ((), ("--pick",)):
             r, calls = self.run_script(*args)
             self.assertNotEqual(r.returncode, 0)
-            self.assertIn("No running devboxes", calls)
+            self.assertIn("No running devboxes or named workspaces", calls)
             self.assertNotIn("tilix", calls)
             os.remove(self.log)
 
@@ -117,6 +117,21 @@ class DevboxSwitcherTest(unittest.TestCase):
         self.assertIn("i3 is not reachable", r.stderr)
         self.assertIn("notify", calls)
         self.assertNotIn("tilix", calls)
+
+    def test_named_workspaces_are_listed_after_devboxes_and_switchable(self):
+        self.set_workspaces(["10", "ws:docs", "dev:alpha", "ws:", "ws:mail"])
+        with open(os.path.join(self.dir, "state_ws.tsv"), "w") as f:
+            f.write("docs\t-\tReading list\tt\tmanual\n")
+        os.makedirs(os.path.dirname(self.registry), exist_ok=True)
+        os.replace(os.path.join(self.dir, "state_ws.tsv"),
+                   os.path.join(os.path.dirname(self.registry), "named_workspaces.tsv"))
+        r, calls = self.run_script("--pick")
+        self.assertEqual(self.fzf_rows(),
+                         ["dev:alpha\talpha", "ws:docs\tdocs  Reading list", "ws:mail\tmail"])
+        self.assertEqual(calls, "switch dev:alpha\n")
+        self.stub("fzf", "tail -n1")
+        r, calls = self.run_script("--pick")
+        self.assertEqual(calls.splitlines()[-1], "switch ws:mail")
 
     def test_prefix_is_not_matched_in_the_middle(self):
         self.set_workspaces(["xdev:nope", "dev:real"])

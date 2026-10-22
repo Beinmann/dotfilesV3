@@ -76,8 +76,8 @@ class DevboxMarkTest(unittest.TestCase):
             f.write("esac\n")
         os.chmod(os.path.join(self.dir, "rofi"), 0o755)
 
-    def run_rofi(self):
-        r = subprocess.run(["bash", SCRIPT, "--rofi"], env={
+    def run_rofi(self, *flags):
+        r = subprocess.run(["bash", SCRIPT, "--rofi", *flags], env={
             "PATH": f"{self.dir}:/usr/bin:/bin", "HOME": self.dir,
             "XDG_STATE_HOME": self.state}, cwd=self.cwd, capture_output=True,
             text=True, stdin=subprocess.DEVNULL)
@@ -121,6 +121,24 @@ class DevboxMarkTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("1-16 letters", out)
         self.assertEqual(self.i3_calls(), "")
+        self.assertFalse(os.path.exists(self.registry))
+
+    def test_ws_rofi_uses_own_prefix_and_registry(self):
+        self.write_registry("devonly")
+        self.set_workspaces([{"name": "10", "focused": True}, {"name": "dev:run"}, {"name": "ws:docs"}])
+        self.fake_rofi("fresh", "Fresh page")
+        code, out = self.run_rofi("--ws")
+        self.assertEqual(code, 0, out)
+        with open(self.rofi_in) as f:
+            self.assertEqual(f.read().split(), ["docs"])
+        self.assertIn('move container to workspace "ws:fresh"', self.i3_calls())
+        with open(os.path.join(self.state, "devbox", "named_workspaces.tsv")) as f:
+            self.assertEqual(f.read().split("\t")[:3], ["fresh", "-", "Fresh page"])
+        self.assertEqual([l[0] for l in self.registry_lines()], ["devonly"])  # devbox registry untouched
+
+    def test_ws_terminal_mode_with_args(self):
+        self.assertEqual(self.run_script("--ws", "docs", "Docs")[0], 0)
+        self.assertIn('"ws:docs"', self.i3_calls())
         self.assertFalse(os.path.exists(self.registry))
 
     def test_rofi_cancel_does_nothing(self):
