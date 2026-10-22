@@ -1,22 +1,56 @@
 #!/usr/bin/env bash
-# Mark the current terminal as a devbox by hand: move it to the i3 workspace
+# Mark the current window as a devbox by hand: move it to the i3 workspace
 # "dev:<name>" so the devbox switcher ($mod+g) finds it. For a terminal that
 # is not started by the DevBox script, e.g. one you then ssh from.
 #
 # Usage: devbox-mark [name [title]]   (asks for what is missing)
+#        devbox-mark --rofi           (any focused window, no terminal needed)
+#
+# --rofi (the "Mark this window as devbox" launcher entry) lists the open
+# devboxes, then the registry ones that are not open; typing any other valid
+# name creates a new devbox (and asks for an optional title). The focused
+# window moves to dev:<name>; errors go to notify-send. Picking an existing
+# name keeps its registry line.
 #
 # Also records the box in the DevBox registry (same file and columns as
 # bash_in_dev_container.sh, plus a fifth column "manual"), with path "-":
 # nothing can start it again. Nothing is written into the current directory.
 set -euo pipefail
 
+rofi_mode=0
+[[ "${1:-}" == "--rofi" ]] && { rofi_mode=1; shift; }
+
+fail() {
+  echo "devbox-mark: $1" >&2
+  [[ $rofi_mode == 1 ]] && { notify-send "Devbox mark" "$1" 2>/dev/null || true; }
+  exit 1
+}
+
+registry="${XDG_STATE_HOME:-$HOME/.local/state}/devbox/registry.tsv"
+
 have_i3() { command -v i3-msg >/dev/null 2>&1 && i3-msg -t get_version >/dev/null 2>&1; }
-have_i3 || { echo "devbox-mark: i3 is not reachable (i3-msg -t get_version failed)." >&2; exit 1; }
-[[ -t 0 && -t 1 ]] || { echo "devbox-mark: needs a terminal." >&2; exit 1; }
+have_i3 || fail "i3 is not reachable (i3-msg -t get_version failed)."
+[[ $rofi_mode == 1 || ( -t 0 && -t 1 ) ]] || fail "needs a terminal."
 
 valid='^[A-Za-z0-9_-]{1,16}$'
 name="${1:-}"; title="${2:-}"
-if ! [[ "$name" =~ $valid ]]; then
+known=0
+if [[ $rofi_mode == 1 ]]; then
+  command -v rofi >/dev/null 2>&1 || fail "rofi not found."
+  workspaces=$(i3-msg -t get_workspaces)
+  running=$(jq -r '.[].name | select(startswith("dev:")) | .[4:]' <<< "$workspaces" | sort)
+  registered=$(cut -f1 "$registry" 2>/dev/null | awk 'NF && !seen[$0]++' || true)
+  names=$({ printf '%s\n' "$running"; printf '%s\n' "$registered"; } | awk 'NF && !seen[$0]++')
+  # Running devboxes first, then the registry ones that are not open.
+  choice=$(rofi -dmenu -i -p 'devbox (new name: type it)' <<< "$names") || exit 0
+  name="${choice//[$'\t\r\n']/}"
+  [[ "$name" =~ $valid ]] || fail "Use 1-16 letters, digits, - or _ (got \"$name\")."
+  if grep -qxF -- "$name" <<< "$names"; then
+    known=1
+  else
+    title=$(rofi -dmenu -p "title for $name (optional)" < /dev/null) || exit 0
+  fi
+elif ! [[ "$name" =~ $valid ]]; then
   [[ -z "$name" ]] || echo "devbox-mark: use 1-16 letters, digits, - or _." >&2
   while :; do
     read -rp "Short name (i3 workspace dev:<name>): " name
@@ -30,18 +64,19 @@ ws="dev:$name"
 
 # Already on that workspace is fine; open elsewhere means the name is taken.
 workspaces=$(i3-msg -t get_workspaces)
-if jq -e --arg n "$ws" 'any(.[]; .name == $n)' <<< "$workspaces" >/dev/null &&
+if [[ $rofi_mode == 0 ]] && jq -e --arg n "$ws" 'any(.[]; .name == $n)' <<< "$workspaces" >/dev/null &&
    ! jq -e --arg n "$ws" 'any(.[]; .name == $n and .focused)' <<< "$workspaces" >/dev/null; then
   echo "devbox-mark: workspace $ws is already open for another devbox." >&2
   exit 1
 fi
 
-registry="${XDG_STATE_HOME:-$HOME/.local/state}/devbox/registry.tsv"
-mkdir -p "$(dirname "$registry")"
-tmp=$(mktemp "$registry.XXXXXX")
-{ awk -F'\t' -v n="$name" '$1 != n' "$registry" 2>/dev/null || true
-  printf '%s\t-\t%s\t%s\tmanual\n' "$name" "$title" "$(date -Is)"; } > "$tmp"
-mv "$tmp" "$registry"
+if [[ $known == 0 ]]; then
+  mkdir -p "$(dirname "$registry")"
+  tmp=$(mktemp "$registry.XXXXXX")
+  { awk -F'\t' -v n="$name" '$1 != n' "$registry" 2>/dev/null || true
+    printf '%s\t-\t%s\t%s\tmanual\n' "$name" "$title" "$(date -Is)"; } > "$tmp"
+  mv "$tmp" "$registry"
+fi
 
 i3-msg "move container to workspace \"$ws\"; workspace \"$ws\"" >/dev/null
-echo "Terminal is now devbox \"$name\" (workspace $ws)."
+echo "Window is now devbox \"$name\" (workspace $ws)."

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Encoding=UTF-8
+Version=1.0
+Type=Application
+Terminal=false
+Exec=sh -c '$HOME/.local/bin/devbox-mark --rofi'
+Name=Mark this window as devbox
+Comment=Move the focused window to a devbox workspace
+Icon=utility-terminal
+Categories=Utility;

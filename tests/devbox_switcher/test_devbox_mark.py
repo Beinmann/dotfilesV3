@@ -63,6 +63,71 @@ class DevboxMarkTest(unittest.TestCase):
         os.close(master)
         return p.wait(), out.decode()
 
+    def fake_rofi(self, *answers):
+        """Stub rofi: prints the next answer per call, logs the list it was given."""
+        self.rofi_in = os.path.join(self.dir, "rofi.in")
+        counter = os.path.join(self.dir, "rofi.n")
+        with open(os.path.join(self.dir, "rofi"), "w") as f:
+            f.write(f'#!/bin/sh\ncat >> {self.rofi_in}\nn=$(cat {counter} 2>/dev/null || echo 0)\n'
+                    f'echo $((n+1)) > {counter}\n')
+            f.write("case $n in\n")
+            for i, a in enumerate(answers):
+                f.write(f"{i}) " + ("exit 1" if a is None else f"printf '%s\\n' '{a}'") + " ;;\n")
+            f.write("esac\n")
+        os.chmod(os.path.join(self.dir, "rofi"), 0o755)
+
+    def run_rofi(self):
+        r = subprocess.run(["bash", SCRIPT, "--rofi"], env={
+            "PATH": f"{self.dir}:/usr/bin:/bin", "HOME": self.dir,
+            "XDG_STATE_HOME": self.state}, cwd=self.cwd, capture_output=True,
+            text=True, stdin=subprocess.DEVNULL)
+        return r.returncode, r.stdout + r.stderr
+
+    def write_registry(self, *names):
+        os.makedirs(os.path.dirname(self.registry), exist_ok=True)
+        with open(self.registry, "w") as f:
+            for n in names:
+                f.write(f"{n}\t/p/{n}\t{n} title\t2026-01-01T00:00:00+00:00\n")
+
+    def test_rofi_lists_running_then_registry_only_and_moves_without_tty(self):
+        self.set_workspaces([{"name": "10", "focused": True}, {"name": "dev:run"}])
+        self.write_registry("old", "run")
+        self.fake_rofi("old")
+        code, out = self.run_rofi()
+        self.assertEqual(code, 0, out)
+        with open(self.rofi_in) as f:
+            self.assertEqual(f.read().split(), ["run", "old"])
+        self.assertIn('move container to workspace "dev:old"', self.i3_calls())
+        self.assertEqual([l[0] for l in self.registry_lines()], ["old", "run"])
+        self.assertEqual(self.registry_lines()[0][1], "/p/old")  # line kept
+
+    def test_rofi_open_devbox_can_receive_another_window(self):
+        self.set_workspaces([{"name": "10", "focused": True}, {"name": "dev:run"}])
+        self.fake_rofi("run")
+        self.assertEqual(self.run_rofi()[0], 0)
+        self.assertIn('"dev:run"', self.i3_calls())
+
+    def test_rofi_new_name_asks_title_and_registers(self):
+        self.fake_rofi("fresh", "Fresh box")
+        code, out = self.run_rofi()
+        self.assertEqual(code, 0, out)
+        (name, path, title, _w, kind), = self.registry_lines()
+        self.assertEqual((name, path, title, kind), ("fresh", "-", "Fresh box", "manual"))
+        self.assertIn('"dev:fresh"', self.i3_calls())
+
+    def test_rofi_invalid_new_name_is_rejected(self):
+        self.fake_rofi("not valid!")
+        code, out = self.run_rofi()
+        self.assertEqual(code, 1)
+        self.assertIn("1-16 letters", out)
+        self.assertEqual(self.i3_calls(), "")
+        self.assertFalse(os.path.exists(self.registry))
+
+    def test_rofi_cancel_does_nothing(self):
+        self.fake_rofi(None)
+        self.assertEqual(self.run_rofi()[0], 0)
+        self.assertEqual(self.i3_calls(), "")
+
     def i3_calls(self):
         if not os.path.exists(self.log):
             return ""
