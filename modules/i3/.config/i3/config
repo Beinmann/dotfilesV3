@@ -88,6 +88,9 @@ assign [class="discord"] 44
 assign [class="firefox"] 20
 for_window [class="firefox" title=".*Calendar.*"] move to workspace 60
 for_window [class="firefox" title=".*ChatGPT.*"] move to workspace 22
+# the devbox switcher is its own tilix process with a distinct class, so it
+# is neither assigned to workspace 10 above nor tiled
+for_window [class="devbox_switcher"] floating enable, resize set 400 px 250 px, move position center
 
 # change focus
 bindsym $mod+h focus left
@@ -211,6 +214,9 @@ bindsym $mod+Ctrl+Shift+5 move container to workspace $ws5a
 
 # Swap workspaces around (main and secondary)
 bindsym $mod+y exec --no-startup-id $scripts/i3_swap_current_workspace_order.sh
+
+# Jump to a running devbox (workspace "dev:<name>", see devbox_switcher.sh)
+bindsym $mod+g exec --no-startup-id $scripts/devbox_switcher.sh
 
 # Go to previous workspace
 bindsym $mod+Tab exec --no-startup-id $scripts/i3_goto_prev_workspace.sh
