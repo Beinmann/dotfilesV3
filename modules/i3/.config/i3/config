@@ -90,7 +90,7 @@ for_window [class="firefox" title=".*Calendar.*"] move to workspace 60
 for_window [class="firefox" title=".*ChatGPT.*"] move to workspace 22
 # the devbox switcher is its own tilix process with a distinct class, so it
 # is neither assigned to workspace 10 above nor tiled
-for_window [class="devbox_switcher"] floating enable, resize set 400 px 250 px, move position center
+for_window [class="devbox_switcher"] floating enable, resize set 70 ppt 250 px, move position center
 
 # change focus
 bindsym $mod+h focus left
