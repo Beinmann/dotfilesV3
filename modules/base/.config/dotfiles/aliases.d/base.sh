@@ -12,10 +12,6 @@ alias r="ranger_cd"
 alias myTimer="timed_notification.sh"
 alias myTimerLog="echo 'Last 20 lines of notification log' && echo '' && cat ~/.notification_log | tail -n 20"
 alias myOpen="open . & disown"
-# Only where the scripts module's RAM script is stowed.
-if [ -f "$HOME/Main/Scripts/RAM_Script_Python/main.py" ]; then
-    alias ram="python3 $HOME/Main/Scripts/RAM_Script_Python/main.py"
-fi
 alias myNautilusAndExit='tmux split-window "open . & exit"'
 alias darkMode="gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'"
 alias lightMode="gsettings set org.gnome.desktop.interface color-scheme 'default'"

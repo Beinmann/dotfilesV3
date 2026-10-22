@@ -70,12 +70,8 @@ class BaseSettingsTest(unittest.TestCase):
                      "mainVenvActivate"):
             self.assertNotIn(gone, names)
 
-    def test_ram_alias_only_when_script_exists(self):
+    def test_ram_alias_is_gone(self):
         self.assertNotIn("alias ram=", self.bash(f". {ALIASES}; alias"))
-        script = os.path.join(self.home, "Main/Scripts/RAM_Script_Python")
-        os.makedirs(script)
-        open(os.path.join(script, "main.py"), "w").close()
-        self.assertIn("alias ram=", self.bash(f". {ALIASES}; alias"))
 
     def test_no_debian_leftovers(self):
         with open(SETTINGS) as f:
