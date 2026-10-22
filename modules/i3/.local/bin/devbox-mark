@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Mark the current terminal as a devbox by hand: move it to the i3 workspace
+# "dev:<name>" so the devbox switcher ($mod+g) finds it. For a terminal that
+# is not started by the DevBox script, e.g. one you then ssh from.
+#
+# Usage: devbox-mark [name [title]]   (asks for what is missing)
+#
+# Also records the box in the DevBox registry (same file and columns as
+# bash_in_dev_container.sh, plus a fifth column "manual"), with path "-":
+# nothing can start it again. Nothing is written into the current directory.
+set -euo pipefail
+
+have_i3() { command -v i3-msg >/dev/null 2>&1 && i3-msg -t get_version >/dev/null 2>&1; }
+have_i3 || { echo "devbox-mark: i3 is not reachable (i3-msg -t get_version failed)." >&2; exit 1; }
+[[ -t 0 && -t 1 ]] || { echo "devbox-mark: needs a terminal." >&2; exit 1; }
+
+valid='^[A-Za-z0-9_-]{1,16}$'
+name="${1:-}"; title="${2:-}"
+if ! [[ "$name" =~ $valid ]]; then
+  [[ -z "$name" ]] || echo "devbox-mark: use 1-16 letters, digits, - or _." >&2
+  while :; do
+    read -rp "Short name (i3 workspace dev:<name>): " name
+    [[ "$name" =~ $valid ]] && break
+    echo "  Use 1-16 letters, digits, - or _." >&2
+  done
+  read -rp "Longer title (optional): " title
+fi
+title="${title//$'\t'/ }"; : "${title:=$name}"
+ws="dev:$name"
+
+# Already on that workspace is fine; open elsewhere means the name is taken.
+workspaces=$(i3-msg -t get_workspaces)
+if jq -e --arg n "$ws" 'any(.[]; .name == $n)' <<< "$workspaces" >/dev/null &&
+   ! jq -e --arg n "$ws" 'any(.[]; .name == $n and .focused)' <<< "$workspaces" >/dev/null; then
+  echo "devbox-mark: workspace $ws is already open for another devbox." >&2
+  exit 1
+fi
+
+registry="${XDG_STATE_HOME:-$HOME/.local/state}/devbox/registry.tsv"
+mkdir -p "$(dirname "$registry")"
+tmp=$(mktemp "$registry.XXXXXX")
+{ awk -F'\t' -v n="$name" '$1 != n' "$registry" 2>/dev/null || true
+  printf '%s\t-\t%s\t%s\tmanual\n' "$name" "$title" "$(date -Is)"; } > "$tmp"
+mv "$tmp" "$registry"
+
+i3-msg "move container to workspace \"$ws\"; workspace \"$ws\"" >/dev/null
+echo "Terminal is now devbox \"$name\" (workspace $ws)."
