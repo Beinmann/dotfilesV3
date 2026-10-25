@@ -117,6 +117,14 @@ class WsMarkTest(unittest.TestCase):
         self.assertEqual((name, path, title, kind), ("fresh", "-", "Fresh box", "manual"))
         self.assertIn('"ws:fresh"', self.i3_calls())
 
+    def test_old_registry_triggers_a_warning(self):
+        self.fake_rofi("fresh", "Fresh box")
+        self.assertNotIn("old registry", self.run_rofi()[1])
+        os.makedirs(os.path.join(self.state, "devbox"), exist_ok=True)
+        open(os.path.join(self.state, "devbox", "registry.tsv"), "w").close()
+        self.fake_rofi("fresh2", "Fresh box")
+        self.assertIn("old registry", self.run_rofi()[1])
+
     def test_rofi_invalid_new_name_is_rejected(self):
         self.fake_rofi("not valid!")
         code, out = self.run_rofi()

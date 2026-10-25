@@ -132,6 +132,16 @@ class WsEditTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(self.names("named_workspaces.tsv"), ["beta"])
 
+    def test_old_registry_triggers_a_warning(self):
+        self.write("named_workspaces.tsv", ["# header"] + ROWS)
+        code, msg = self.run_script(self.stub("true"))
+        self.assertNotIn("old registry", msg)
+        self.write("registry.tsv", ROWS)
+        code, msg = self.run_script(self.stub("true"))
+        self.assertEqual(code, 0)
+        self.assertIn("old registry", msg)
+        self.assertEqual(self.read("registry.tsv"), ROWS)
+
     def test_ws_flag_is_accepted_and_ignored(self):
         self.write("named_workspaces.tsv", ["# header"] + ROWS)
         code, _ = self.run_script(self.stub('sed -i /^beta/d "$1"'), "--ws")

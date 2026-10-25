@@ -89,6 +89,9 @@ fi
 [[ -n "$editor" ]] || { echo "ws-edit: no editor found, set \$EDITOR." >&2; exit 1; }
 
 registry="${XDG_STATE_HOME:-$HOME/.local/state}/devbox/$regname"
+for old in "$(dirname "$registry")/registry.tsv" "$registry.old"; do
+  [[ -e "$old" ]] && echo "ws-edit: warning: old registry $old still exists; it is no longer used, delete it." >&2
+done
 mkdir -p "$(dirname "$registry")"
 tmp=$(mktemp "$registry.XXXXXX")
 trap 'rm -f "$tmp" "$tmp.new"' EXIT

@@ -37,6 +37,12 @@ fail() {
 }
 
 registry="${XDG_STATE_HOME:-$HOME/.local/state}/devbox/$regname"
+for old in "$(dirname "$registry")/registry.tsv" "$registry.old"; do
+  if [[ -e "$old" ]]; then
+    echo "ws-mark: warning: old registry $old still exists; it is no longer used, delete it." >&2
+    [[ $rofi_mode == 1 ]] && { notify-send "Mark window" "Old registry $old is no longer used, delete it." 2>/dev/null || true; }
+  fi
+done
 
 have_i3() { command -v i3-msg >/dev/null 2>&1 && i3-msg -t get_version >/dev/null 2>&1; }
 have_i3 || fail "i3 is not reachable (i3-msg -t get_version failed)."
