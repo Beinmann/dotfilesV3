@@ -5,14 +5,15 @@
 # Usage: ws-edit         (devbox registry, registry.tsv)
 #        ws-edit --ws    (named workspaces, named_workspaces.tsv)
 #
-# The named-workspace file is laid out as labelled, aligned columns with a
-# comment header explaining how to add, rename or delete an entry; columns
-# may be separated by a tab or by two or more spaces, so an editor turning
-# tabs into spaces does no harm. The devbox registry is shared with
-# bash_in_dev_container.sh and stays tab separated, without comments.
+# Both registries are shown as labelled, aligned columns with a comment
+# header explaining how to add, rename or delete an entry; columns may be
+# separated by a tab or by two or more spaces, so an editor turning tabs
+# into spaces does no harm. The named-workspace file is saved in that form.
+# The devbox registry is shared with bash_in_dev_container.sh, so it is
+# written back as plain tab-separated lines without comments.
 #
 # On save every line is checked (name 1-16 letters, digits, - or _, no
-# duplicates for named workspaces, at most 5 columns); on a problem the
+# duplicates, at most 5 columns); on a problem the
 # registry stays as it was and the problems are listed. Edits go to a copy
 # that replaces the registry only after that. Needs no i3.
 #
@@ -30,12 +31,14 @@ while [[ "${1:-}" == --normalize || "${1:-}" == --ws ]]; do
 done
 [[ $# == 0 ]] || { echo "usage: ws-edit [--ws]" >&2; exit 2; }
 
-header='# Named workspaces, one per line. Columns are separated by a tab or by
+header_for() {
+  local what=$1 ws_name=$2
+  printf '%s' "# $what, one per line. Columns are separated by a tab or by
 # two or more spaces (a single space is part of the title).
 #
 #   NAME  PATH  TITLE  ADDED  SOURCE
 #
-#   NAME    1-16 letters, digits, - or _; the i3 workspace is ws:<name>
+#   NAME    1-16 letters, digits, - or _; the i3 workspace is $ws_name:<name>
 #   PATH    directory of the project, or - for none
 #   TITLE   free text shown in the switcher (no two spaces in a row)
 #   ADDED, SOURCE   optional, written by ws-mark
@@ -44,29 +47,39 @@ header='# Named workspaces, one per line. Columns are separated by a tab or by
 # Rename:  change the NAME of a line.
 # Delete:  remove the line.
 # Lines starting with # and empty lines are ignored. On save the file is
-# checked and realigned; if something is wrong the file is left unchanged.'
+# checked and realigned; if something is wrong the file is left unchanged."
+}
+if [[ $ws == 1 ]]; then header=$(header_for "Named workspaces" ws); else header=$(header_for "Devboxes" dev); fi
 
-# Validate rows on stdin, print them in the registry format on stdout.
+# Validate rows on stdin, print them on stdout: as the aligned table when
+# $1 is "table", else in the registry's own format (named workspaces: the
+# table; devboxes: plain tab-separated lines, as bash_in_dev_container.sh
+# reads them). $2 = lax: a repeated name silently replaces the earlier line
+# (devbox registries are append-only, the later line wins).
 render() {
-  awk -F'\t|  +' -v ws="$ws" -v header="$header" '
+  local mode=${1:-save} lax=${2:-0} table=$ws
+  [[ $mode == table ]] && table=1
+  awk -F'\t|  +' -v table="$table" -v lax="$lax" -v header="$header" '
     function bad(msg) { print "ws-edit: line " NR ": " msg > "/dev/stderr"; errors++ }
     /^[ \t]*(#|$)/ { next }
     {
       sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "")
       if ($1 !~ /^[A-Za-z0-9_-]+$/ || length($1) > 16) { bad("bad name \"" $1 "\" (1-16 letters, digits, - or _)"); next }
       if (NF > 5) { bad("too many columns (" NF ", at most 5; two spaces in a row split a column)"); next }
-      if (ws && ($1 in seen)) { bad("duplicate name \"" $1 "\" (line " seen[$1] ")"); next }
-      seen[$1] = NR
-      n++
-      for (i = 1; i <= 5; i++) cell[n, i] = $i
-      if (ws) {
-        if (cell[n, 2] == "") cell[n, 2] = "-"
-        if (cell[n, 3] == "") cell[n, 3] = $1
+      if ($1 in seen) {
+        if (!lax) { bad("duplicate name \"" $1 "\" (line " seen[$1] ")"); next }
+        for (i = 1; i <= 5; i++) cell[row[$1], i] = $i
+        r = row[$1]
+      } else {
+        n++; r = n; row[$1] = n; seen[$1] = NR
+        for (i = 1; i <= 5; i++) cell[n, i] = $i
       }
+      if (cell[r, 2] == "") cell[r, 2] = "-"
+      if (cell[r, 3] == "") cell[r, 3] = $1
     }
     END {
       if (errors) exit 1
-      if (!ws) {
+      if (!table) {
         for (r = 1; r <= n; r++) {
           line = cell[r, 1]
           for (i = 2; i <= 5 && (i <= 4 || cell[r, i] != ""); i++) line = line "\t" cell[r, i]
@@ -112,15 +125,16 @@ if [[ $ws == 1 && -s "$registry" ]] && ! grep -qm1 '^#' "$registry"; then
   mv "$registry" "$registry.old"
   echo "ws-edit: old format, moved to $registry.old; starting a new file." >&2
 fi
-# Realign what is there; a file that does not validate is offered as it is.
+# Show what is there as the aligned table; a file that does not validate is
+# offered as it is.
 if [[ -f "$registry" ]]; then
-  render < "$registry" > "$tmp" 2>/dev/null || cp "$registry" "$tmp"
+  render table 1 < "$registry" > "$tmp" 2>/dev/null || cp "$registry" "$tmp"
 fi
-[[ $ws == 0 || -s "$tmp" ]] || render < /dev/null > "$tmp"
+[[ -s "$tmp" ]] || render table < /dev/null > "$tmp"
 
 # $editor may carry arguments (e.g. "code -w"), so it is left unquoted.
 # shellcheck disable=SC2086
 $editor "$tmp" || { echo "ws-edit: editor failed, registry unchanged." >&2; exit 1; }
-render < "$tmp" > "$tmp.new" || { echo "ws-edit: registry unchanged." >&2; exit 1; }
+render save < "$tmp" > "$tmp.new" || { echo "ws-edit: registry unchanged." >&2; exit 1; }
 mv "$tmp.new" "$registry"
 echo "Saved $registry."

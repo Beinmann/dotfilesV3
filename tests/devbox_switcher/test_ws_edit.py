@@ -4,6 +4,7 @@ Run from the repo root:  python3 -m unittest discover tests/devbox_switcher
 """
 
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -123,6 +124,44 @@ class WsEditTest(unittest.TestCase):
         self.assertEqual(self.read("registry.tsv"), [])
         code, _ = self.run_script(self.stub("true"), "--ws")
         self.assertEqual(code, 0)
+
+    def test_devbox_registry_is_shown_as_table_and_saved_unchanged(self):
+        row = "server\t-\tsome title\t2026-10-22T19:39:53+02:00\tmanual"
+        self.write("registry.tsv", [row, ROWS[0]])
+        seen = os.path.join(self.dir, "seen")
+        code, _ = self.run_script(self.stub(f'cp "$1" {seen}'))
+        self.assertEqual(code, 0)
+        shown = open(seen).read().splitlines()
+        self.assertTrue(shown[0].startswith("# Devboxes"))
+        self.assertTrue(any(l.startswith("# NAME  PATH") for l in shown))
+        line = next(l for l in shown if l.startswith("server"))
+        self.assertNotIn("\t", line)
+        self.assertEqual(re.split(r"  +", line),
+                         ["server", "-", "some title", "2026-10-22T19:39:53+02:00", "manual"])
+        self.assertEqual(self.read("registry.tsv"), [row, ROWS[0]])
+
+    def test_devbox_copied_renamed_line_is_saved_as_tabs(self):
+        self.write("registry.tsv", ROWS)
+        editor = self.stub('grep "^alpha" "$1" | sed "s/^alpha/alpha2/" >> "$1"')
+        code, msg = self.run_script(editor)
+        self.assertEqual(code, 0, msg)
+        self.assertEqual(self.read("registry.tsv"),
+                         ROWS + [ROWS[0].replace("alpha", "alpha2", 1)])
+
+    def test_devbox_invalid_lines_keep_registry(self):
+        self.write("registry.tsv", ROWS)
+        for bad in ("bad name!\t-\tx", "alpha\t-\tdup"):
+            code, msg = self.run_script(self.stub(f'printf "{bad}\\n" >> "$1"'))
+            self.assertEqual(code, 1, bad)
+            self.assertIn("line", msg)
+            self.assertEqual(self.read("registry.tsv"), ROWS, bad)
+
+    def test_devbox_repeated_name_on_open_later_line_wins(self):
+        later = ROWS[0].replace("First", "Newer")
+        self.write("registry.tsv", [ROWS[0], ROWS[1], later])
+        code, _ = self.run_script(self.stub("true"))
+        self.assertEqual(code, 0)
+        self.assertEqual(self.read("registry.tsv"), [later, ROWS[1]])
 
     def test_devbox_registry_stays_tab_separated(self):
         self.write("registry.tsv", ROWS)
