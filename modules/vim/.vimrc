@@ -42,6 +42,9 @@ set incsearch
 " --- Visuals ---
 syntax on
 set termguicolors
+" Don't query the terminal's fg/bg colour: the translucent rgba: background
+" from .Xresources makes Vim print 'Color name "rgba:..." is not defined'.
+set t_RB= t_RF=
 " set background=dark
 " colorscheme slate
 set noshowmode         " Hide --INSERT-- if you plan to use a statusline plugin
