@@ -84,7 +84,7 @@ if [[ $known == 0 ]]; then
   title="${title//  / }"
   { awk -F'\t|  +' -v n="$name" '!/^[ \t]*(#|$)/ && $1 != n' "$registry" 2>/dev/null || true
     printf '%s\t%s\t%s\t%s\tmanual\n' "$name" "$dir" "$title" "$(date -Is)"; } |
-    bash "$edit" --normalize --ws > "$tmp" || { rm -f "$tmp"; fail "could not write $registry."; }
+    bash "$edit" --normalize > "$tmp" || { rm -f "$tmp"; fail "could not write $registry."; }
   mv "$tmp" "$registry"
 fi
 

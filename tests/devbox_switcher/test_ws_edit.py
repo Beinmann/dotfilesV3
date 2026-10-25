@@ -4,7 +4,6 @@ Run from the repo root:  python3 -m unittest discover tests/devbox_switcher
 """
 
 import os
-import re
 import subprocess
 import tempfile
 import unittest
@@ -54,15 +53,9 @@ class WsEditTest(unittest.TestCase):
     def names(self, regname):
         return [l.split()[0] for l in self.rows(regname)]
 
-    def test_deleting_a_line_removes_the_entry(self):
-        self.write("registry.tsv", ROWS)
-        code, _ = self.run_script(self.stub('sed -i /^alpha/d "$1"'))
-        self.assertEqual(code, 0)
-        self.assertEqual(self.read("registry.tsv"), [ROWS[1]])
-
     def test_ws_round_trip_is_labelled_and_aligned(self):
         self.write("named_workspaces.tsv", ["# header"] + ROWS)
-        code, _ = self.run_script(self.stub("true"), "--ws")
+        code, _ = self.run_script(self.stub("true"))
         self.assertEqual(code, 0)
         lines = self.read("named_workspaces.tsv")
         self.assertTrue(lines[0].startswith("#"))
@@ -75,7 +68,7 @@ class WsEditTest(unittest.TestCase):
     def test_ws_delete_a_line(self):
         self.write("registry.tsv", ROWS)
         self.write("named_workspaces.tsv", ["# header"] + ROWS)
-        code, _ = self.run_script(self.stub('sed -i /^beta/d "$1"'), "--ws")
+        code, _ = self.run_script(self.stub('sed -i /^beta/d "$1"'))
         self.assertEqual(code, 0)
         self.assertEqual(self.names("named_workspaces.tsv"), ["alpha"])
         self.assertEqual(self.read("registry.tsv"), ROWS)
@@ -86,14 +79,14 @@ class WsEditTest(unittest.TestCase):
         editor = self.stub(
             'sed -i "s/\\t/    /g" "$1"; '
             'grep "^alpha" "$1" | sed "s/^alpha/alpha2/" >> "$1"')
-        code, msg = self.run_script(editor, "--ws")
+        code, msg = self.run_script(editor)
         self.assertEqual(code, 0, msg)
         self.assertEqual(self.names("named_workspaces.tsv"),
                          ["alpha", "beta", "alpha2"])
 
     def test_ws_path_may_be_dash_and_title_defaults(self):
         self.write("named_workspaces.tsv", ["# header"])
-        code, _ = self.run_script(self.stub('printf "web  -  Some browser\\nmail\\n" >> "$1"'), "--ws")
+        code, _ = self.run_script(self.stub('printf "web  -  Some browser\\nmail\\n" >> "$1"'))
         self.assertEqual(code, 0)
         rows = [l.split("  ") for l in self.rows("named_workspaces.tsv")]
         self.assertEqual([r[0] for r in rows], ["web", "mail"])
@@ -104,7 +97,7 @@ class WsEditTest(unittest.TestCase):
         before = self.read("named_workspaces.tsv")
         for bad in ("bad name!\t-\tx", "alpha\t-\tdup", "waytoolongname_for_ws\t-\tx",
                     "a\t-\tb\tc\td\te"):
-            code, msg = self.run_script(self.stub(f'printf "{bad}\\n" >> "$1"'), "--ws")
+            code, msg = self.run_script(self.stub(f'printf "{bad}\\n" >> "$1"'))
             self.assertEqual(code, 1, bad)
             self.assertIn("unchanged", msg)
             self.assertIn("line", msg)
@@ -112,7 +105,7 @@ class WsEditTest(unittest.TestCase):
 
     def test_ws_old_format_is_set_aside(self):
         self.write("named_workspaces.tsv", ROWS)
-        code, msg = self.run_script(self.stub("true"), "--ws")
+        code, msg = self.run_script(self.stub("true"))
         self.assertEqual(code, 0)
         self.assertIn(".old", msg)
         self.assertEqual(self.read("named_workspaces.tsv.old"), ROWS)
@@ -121,68 +114,29 @@ class WsEditTest(unittest.TestCase):
     def test_missing_registry_and_directory(self):
         code, _ = self.run_script(self.stub("true"))
         self.assertEqual(code, 0)
-        self.assertEqual(self.read("registry.tsv"), [])
-        code, _ = self.run_script(self.stub("true"), "--ws")
-        self.assertEqual(code, 0)
-
-    def test_devbox_registry_is_shown_as_table_and_saved_unchanged(self):
-        row = "server\t-\tsome title\t2026-10-22T19:39:53+02:00\tmanual"
-        self.write("registry.tsv", [row, ROWS[0]])
-        seen = os.path.join(self.dir, "seen")
-        code, _ = self.run_script(self.stub(f'cp "$1" {seen}'))
-        self.assertEqual(code, 0)
-        shown = open(seen).read().splitlines()
-        self.assertTrue(shown[0].startswith("# Devboxes"))
-        self.assertTrue(any(l.startswith("# NAME  PATH") for l in shown))
-        line = next(l for l in shown if l.startswith("server"))
-        self.assertNotIn("\t", line)
-        self.assertEqual(re.split(r"  +", line),
-                         ["server", "-", "some title", "2026-10-22T19:39:53+02:00", "manual"])
-        self.assertEqual(self.read("registry.tsv"), [row, ROWS[0]])
-
-    def test_devbox_copied_renamed_line_is_saved_as_tabs(self):
-        self.write("registry.tsv", ROWS)
-        editor = self.stub('grep "^alpha" "$1" | sed "s/^alpha/alpha2/" >> "$1"')
-        code, msg = self.run_script(editor)
-        self.assertEqual(code, 0, msg)
-        self.assertEqual(self.read("registry.tsv"),
-                         ROWS + [ROWS[0].replace("alpha", "alpha2", 1)])
-
-    def test_devbox_invalid_lines_keep_registry(self):
-        self.write("registry.tsv", ROWS)
-        for bad in ("bad name!\t-\tx", "alpha\t-\tdup"):
-            code, msg = self.run_script(self.stub(f'printf "{bad}\\n" >> "$1"'))
-            self.assertEqual(code, 1, bad)
-            self.assertIn("line", msg)
-            self.assertEqual(self.read("registry.tsv"), ROWS, bad)
-
-    def test_devbox_repeated_name_on_open_later_line_wins(self):
-        later = ROWS[0].replace("First", "Newer")
-        self.write("registry.tsv", [ROWS[0], ROWS[1], later])
-        code, _ = self.run_script(self.stub("true"))
-        self.assertEqual(code, 0)
-        self.assertEqual(self.read("registry.tsv"), [later, ROWS[1]])
-
-    def test_devbox_registry_stays_tab_separated(self):
-        self.write("registry.tsv", ROWS)
-        code, _ = self.run_script(self.stub('sed -i "s/\\t/    /g" "$1"'))
-        self.assertEqual(code, 0)
-        self.assertEqual(self.read("registry.tsv"), ROWS)
+        self.assertEqual(self.names("named_workspaces.tsv"), [])
 
     def test_failing_editor_leaves_registry_alone(self):
-        self.write("registry.tsv", ROWS)
+        self.write("named_workspaces.tsv", ["# header"] + ROWS)
+        before = self.read("named_workspaces.tsv")
         code, msg = self.run_script(self.stub('echo junk > "$1"; exit 1'))
         self.assertEqual(code, 1)
         self.assertIn("unchanged", msg)
-        self.assertEqual(self.read("registry.tsv"), ROWS)
-        self.assertEqual(os.listdir(self.devbox), ["registry.tsv"])
+        self.assertEqual(self.read("named_workspaces.tsv"), before)
+        self.assertEqual(os.listdir(self.devbox), ["named_workspaces.tsv"])
 
     def test_editor_fallback_to_EDITOR(self):
-        self.write("registry.tsv", ROWS)
+        self.write("named_workspaces.tsv", ["# header"] + ROWS)
         editor = self.stub('sed -i /^alpha/d "$1"')
         code, _ = self.run_script("", env_extra={"VISUAL": "", "EDITOR": editor})
         self.assertEqual(code, 0)
-        self.assertEqual(self.read("registry.tsv"), [ROWS[1]])
+        self.assertEqual(self.names("named_workspaces.tsv"), ["beta"])
+
+    def test_ws_flag_is_accepted_and_ignored(self):
+        self.write("named_workspaces.tsv", ["# header"] + ROWS)
+        code, _ = self.run_script(self.stub('sed -i /^beta/d "$1"'), "--ws")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.names("named_workspaces.tsv"), ["alpha"])
 
 
 if __name__ == "__main__":
