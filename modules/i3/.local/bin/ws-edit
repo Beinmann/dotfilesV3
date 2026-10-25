@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Edit the devbox registry by hand, e.g. to remove stale entries: opens it in
+# $VISUAL, else $EDITOR, else the first of sensible-editor, nano, vi found.
+#
+# Usage: ws-edit         (devbox registry, registry.tsv)
+#        ws-edit --ws    (named workspaces, named_workspaces.tsv)
+#
+# One line per entry (name, path, title, date, source; tab separated).
+# Delete a line and save to forget that entry: it then no longer shows up in
+# "ws-mark --rofi" or the switcher (unless its workspace is still open).
+# Edits go to a copy that replaces the registry only after the editor exits
+# successfully, so aborting leaves the registry as it was. Needs no i3.
+set -euo pipefail
+
+regname=registry.tsv
+if [[ "${1:-}" == --ws ]]; then regname=named_workspaces.tsv; shift; fi
+[[ $# == 0 ]] || { echo "usage: ws-edit [--ws]" >&2; exit 2; }
+
+editor="${VISUAL:-${EDITOR:-}}"
+if [[ -z "$editor" ]]; then
+  for e in sensible-editor nano vi; do
+    command -v "$e" >/dev/null 2>&1 && { editor=$e; break; }
+  done
+fi
+[[ -n "$editor" ]] || { echo "ws-edit: no editor found, set \$EDITOR." >&2; exit 1; }
+
+registry="${XDG_STATE_HOME:-$HOME/.local/state}/devbox/$regname"
+mkdir -p "$(dirname "$registry")"
+tmp=$(mktemp "$registry.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+[[ ! -f "$registry" ]] || cp "$registry" "$tmp"
+
+# $editor may carry arguments (e.g. "code -w"), so it is left unquoted.
+# shellcheck disable=SC2086
+$editor "$tmp" || { echo "ws-edit: editor failed, registry unchanged." >&2; exit 1; }
+mv "$tmp" "$registry"
+echo "Saved $registry."
