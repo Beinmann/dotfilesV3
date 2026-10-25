@@ -1,36 +1,32 @@
 #!/usr/bin/env bash
-# Mark the current window as a devbox by hand: move it to the i3 workspace
-# "dev:<name>" so the devbox switcher ($mod+o) finds it. For a terminal that
-# is not started by the DevBox script, e.g. one you then ssh from.
+# Put the current window on a named workspace: move it to the i3 workspace
+# "ws:<name>" so the switcher ($mod+o) finds it, e.g. a browser window to
+# keep around or a terminal you ssh from.
 #
 # Usage: ws-mark [name [title]]   (asks for what is missing)
 #        ws-mark --rofi           (any focused window, no terminal needed)
-#        ws-mark --ws [...]       (named workspace "ws:<name>" instead)
 #
-# --ws is the general form for things that are not devboxes (a browser
-# window, a program to keep open once): workspace "ws:<name>", registry
-# named_workspaces.tsv next to the devbox registry (same columns). The
-# switcher lists both kinds. --ws combines with --rofi.
+# The old --ws flag is accepted and ignored; "dev:<name>" workspaces are no
+# longer made by hand (only bash_in_dev_container.sh still makes them).
+# Several windows may share one name: moving another one to a workspace that
+# is already open just adds it there.
 #
-# --rofi (the "Mark this window as devbox" launcher entry) lists the open
-# devboxes, then the registry ones that are not open; typing any other valid
-# name creates a new devbox (and asks for an optional title). The focused
-# window moves to dev:<name>; errors go to notify-send. Picking an existing
-# name keeps its registry line.
+# --rofi (the "Mark this window as named workspace" launcher entry) lists the
+# open named workspaces, then the registry ones that are not open; typing
+# any other valid name creates a new one (and asks for an optional title).
+# The focused window moves to ws:<name>; errors go to notify-send. Picking
+# an existing name keeps its registry line.
 #
-# Also records the box in the DevBox registry (same file and columns as
-# bash_in_dev_container.sh, plus a fifth column "manual"), with path "-":
-# nothing can start it again. When it asks for name and title in a terminal
-# it also offers to record the current directory as the path (default no).
-# Nothing is written into the current directory.
+# Also records the name in the registry named_workspaces.tsv next to the
+# devbox registry (columns: see ws-edit), with a fifth column "manual" and
+# path "-" unless, when it asks for name and title in a terminal, you let it
+# record the current directory. Nothing is written into the current
+# directory.
 set -euo pipefail
 
-rofi_mode=0; kind=devbox; prefix="dev:"; regname=registry.tsv
+rofi_mode=0; kind="named workspace"; prefix="ws:"; regname=named_workspaces.tsv
 while [[ "${1:-}" == --rofi || "${1:-}" == --ws ]]; do
-  case "$1" in
-    --rofi) rofi_mode=1 ;;
-    --ws) kind="named workspace"; prefix="ws:"; regname=named_workspaces.tsv ;;
-  esac
+  [[ "$1" == --rofi ]] && rofi_mode=1
   shift
 done
 
@@ -78,30 +74,17 @@ fi
 title="${title//$'\t'/ }"; : "${title:=$name}"
 ws="$prefix$name"
 
-# Already on that workspace is fine; open elsewhere means the name is taken.
-workspaces=$(i3-msg -t get_workspaces)
-if [[ $rofi_mode == 0 ]] && jq -e --arg n "$ws" 'any(.[]; .name == $n)' <<< "$workspaces" >/dev/null &&
-   ! jq -e --arg n "$ws" 'any(.[]; .name == $n and .focused)' <<< "$workspaces" >/dev/null; then
-  echo "ws-mark: workspace $ws is already open for another $kind." >&2
-  exit 1
-fi
-
 if [[ $known == 0 ]]; then
   mkdir -p "$(dirname "$registry")"
   tmp=$(mktemp "$registry.XXXXXX")
   edit="$(dirname "$0")/ws-edit"
-  if [[ $regname == named_workspaces.tsv ]]; then
-    # Aligned format with a comment header (see ws-edit); a file in the old
-    # format is set aside once.
-    if [[ -s "$registry" ]] && ! grep -qm1 '^#' "$registry"; then mv "$registry" "$registry.old"; fi
-    title="${title//  / }"
-    { awk -F'\t|  +' -v n="$name" '!/^[ \t]*(#|$)/ && $1 != n' "$registry" 2>/dev/null || true
-      printf '%s\t%s\t%s\t%s\tmanual\n' "$name" "$dir" "$title" "$(date -Is)"; } |
-      bash "$edit" --normalize --ws > "$tmp" || { rm -f "$tmp"; fail "could not write $registry."; }
-  else
-    { awk -F'\t' -v n="$name" '$1 != n' "$registry" 2>/dev/null || true
-      printf '%s\t%s\t%s\t%s\tmanual\n' "$name" "$dir" "$title" "$(date -Is)"; } > "$tmp"
-  fi
+  # Aligned format with a comment header (see ws-edit); a file in the old
+  # format is set aside once.
+  if [[ -s "$registry" ]] && ! grep -qm1 '^#' "$registry"; then mv "$registry" "$registry.old"; fi
+  title="${title//  / }"
+  { awk -F'\t|  +' -v n="$name" '!/^[ \t]*(#|$)/ && $1 != n' "$registry" 2>/dev/null || true
+    printf '%s\t%s\t%s\t%s\tmanual\n' "$name" "$dir" "$title" "$(date -Is)"; } |
+    bash "$edit" --normalize --ws > "$tmp" || { rm -f "$tmp"; fail "could not write $registry."; }
   mv "$tmp" "$registry"
 fi
 

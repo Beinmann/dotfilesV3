@@ -3,7 +3,7 @@
 #
 # Named workspaces ("ws:<name>", registry named_workspaces.tsv next to the
 # devbox registry, same columns) are the general form: any window put there
-# with ws-mark --ws, e.g. a browser window to keep around.
+# with ws-mark, e.g. a browser window to keep around.
 #
 # bash_in_dev_container.sh (DevBox repo) moves its terminal to workspace
 # "dev:<name>"; i3 drops a workspace once its last window closes, so the
@@ -33,7 +33,7 @@ fail() {
 have_i3() { command -v i3-msg >/dev/null 2>&1 && i3-msg -t get_version >/dev/null 2>&1; }
 
 # Full workspace names of the open devboxes ("dev:<name>") and then of the
-# open named workspaces ("ws:<name>", see ws-mark --ws).
+# open named workspaces ("ws:<name>", see ws-mark).
 running_workspaces() {
   local names p
   names=$(i3-msg -t get_workspaces | jq -r '.[].name')
