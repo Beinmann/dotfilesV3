@@ -48,7 +48,7 @@ picker_rows() {
   running_workspaces | awk -F'\t' -v home="$HOME" -v reg="$registry" -v wsreg="$ws_registry" \
       -v dp="$prefix" -v wp="$ws_prefix" '
     function load(file, tag,   line, f) {
-      while ((getline line < file) > 0) { split(line, f, "\t"); path[tag f[1]] = f[2]; title[tag f[1]] = f[3] }
+      while ((getline line < file) > 0) { if (line ~ /^[ \t]*(#|$)/) continue; split(line, f, /\t|  +/); path[tag f[1]] = f[2]; title[tag f[1]] = f[3] }
     }
     BEGIN { load(reg, "d:"); load(wsreg, "w:") }
     {

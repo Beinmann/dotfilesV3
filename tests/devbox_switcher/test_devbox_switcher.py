@@ -133,6 +133,16 @@ class DevboxSwitcherTest(unittest.TestCase):
         r, calls = self.run_script("--pick")
         self.assertEqual(calls.splitlines()[-1], "switch ws:mail")
 
+    def test_aligned_named_workspace_file_with_comments(self):
+        self.set_workspaces(["ws:docs", "ws:mail"])
+        os.makedirs(os.path.dirname(self.registry), exist_ok=True)
+        with open(os.path.join(os.path.dirname(self.registry), "named_workspaces.tsv"), "w") as f:
+            f.write("# header\n\n# NAME  PATH  TITLE\n"
+                    "docs   -     Reading list  t  manual\n"
+                    "mail   -     mail\n")
+        r, calls = self.run_script("--pick")
+        self.assertEqual(self.fzf_rows(), ["ws:docs\tdocs  Reading list", "ws:mail\tmail"])
+
     def test_prefix_is_not_matched_in_the_middle(self):
         self.set_workspaces(["xdev:nope", "dev:real"])
         r, calls = self.run_script("--pick")

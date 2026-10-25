@@ -8,6 +8,7 @@ Run from the repo root:  python3 -m unittest discover tests/devbox_switcher
 import json
 import os
 import pty
+import re
 import subprocess
 import tempfile
 import unittest
@@ -133,7 +134,8 @@ class WsMarkTest(unittest.TestCase):
             self.assertEqual(f.read().split(), ["docs"])
         self.assertIn('move container to workspace "ws:fresh"', self.i3_calls())
         with open(os.path.join(self.state, "devbox", "named_workspaces.tsv")) as f:
-            self.assertEqual(f.read().split("\t")[:3], ["fresh", "-", "Fresh page"])
+            rows = [l for l in f.read().splitlines() if l and not l.startswith("#")]
+        self.assertEqual(re.split(r"\t|  +", rows[0])[:3], ["fresh", "-", "Fresh page"])
         self.assertEqual([l[0] for l in self.registry_lines()], ["devonly"])  # devbox registry untouched
 
     def test_ws_terminal_mode_with_args(self):
@@ -177,7 +179,8 @@ class WsMarkTest(unittest.TestCase):
         code, out = self.run_script("--ws", answers="docs\nDocs\ny\n")
         self.assertEqual(code, 0, out)
         with open(os.path.join(self.state, "devbox", "named_workspaces.tsv")) as f:
-            self.assertEqual(f.read().split("\t")[1], os.path.realpath(self.cwd))
+            rows = [l for l in f.read().splitlines() if l and not l.startswith("#")]
+        self.assertEqual(re.split(r"\t|  +", rows[0])[1], os.path.realpath(self.cwd))
 
     def test_args_never_ask_about_directory(self):
         code, out = self.run_script("alpha", "one")

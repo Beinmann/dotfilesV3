@@ -53,7 +53,7 @@ if [[ $rofi_mode == 1 ]]; then
   command -v rofi >/dev/null 2>&1 || fail "rofi not found."
   workspaces=$(i3-msg -t get_workspaces)
   running=$(jq -r --arg p "$prefix" '.[].name | select(startswith($p)) | .[($p | length):]' <<< "$workspaces" | sort)
-  registered=$(cut -f1 "$registry" 2>/dev/null | awk 'NF && !seen[$0]++' || true)
+  registered=$(awk -F'\t|  +' '!/^[ \t]*(#|$)/ && !seen[$1]++ {print $1}' "$registry" 2>/dev/null || true)
   names=$({ printf '%s\n' "$running"; printf '%s\n' "$registered"; } | awk 'NF && !seen[$0]++')
   # Open ones first, then the registry ones that are not open.
   choice=$(rofi -dmenu -i -p "$kind (new name: type it)" <<< "$names") || exit 0
@@ -89,8 +89,19 @@ fi
 if [[ $known == 0 ]]; then
   mkdir -p "$(dirname "$registry")"
   tmp=$(mktemp "$registry.XXXXXX")
-  { awk -F'\t' -v n="$name" '$1 != n' "$registry" 2>/dev/null || true
-    printf '%s\t%s\t%s\t%s\tmanual\n' "$name" "$dir" "$title" "$(date -Is)"; } > "$tmp"
+  edit="$(dirname "$0")/ws-edit"
+  if [[ $regname == named_workspaces.tsv ]]; then
+    # Aligned format with a comment header (see ws-edit); a file in the old
+    # format is set aside once.
+    if [[ -s "$registry" ]] && ! grep -qm1 '^#' "$registry"; then mv "$registry" "$registry.old"; fi
+    title="${title//  / }"
+    { awk -F'\t|  +' -v n="$name" '!/^[ \t]*(#|$)/ && $1 != n' "$registry" 2>/dev/null || true
+      printf '%s\t%s\t%s\t%s\tmanual\n' "$name" "$dir" "$title" "$(date -Is)"; } |
+      bash "$edit" --normalize --ws > "$tmp" || { rm -f "$tmp"; fail "could not write $registry."; }
+  else
+    { awk -F'\t' -v n="$name" '$1 != n' "$registry" 2>/dev/null || true
+      printf '%s\t%s\t%s\t%s\tmanual\n' "$name" "$dir" "$title" "$(date -Is)"; } > "$tmp"
+  fi
   mv "$tmp" "$registry"
 fi
 
