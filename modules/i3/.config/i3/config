@@ -83,7 +83,7 @@ bindsym $mod+d exec --no-startup-id exec $HOME/Main/Scripts/Helper_Scripts/run_l
 # Use "xprop | grep WM_CLASS" to get a special cursor that when clicking on a window will tell you it's window class
 assign [class="Tilix"] 10
 assign [class="obsidian"] 40
-assign [class="Bitwarden"] 50
+assign [class="bitwarden"] 50
 assign [class="discord"] 44
 assign [class="firefox"] 20
 for_window [class="firefox" title=".*Calendar.*"] move to workspace 60
