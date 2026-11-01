@@ -81,7 +81,6 @@ bindsym $mod+i exec --no-startup-id $HOME/.config/i3/scripts/show_sysinfo.sh
 bindsym $mod+d exec --no-startup-id exec $HOME/Main/Scripts/Helper_Scripts/run_launcher.sh
 
 # Use "xprop | grep WM_CLASS" to get a special cursor that when clicking on a window will tell you it's window class
-assign [class="Tilix"] 10
 assign [class="obsidian"] 40
 assign [class="bitwarden"] 50
 assign [class="discord"] 44
@@ -89,7 +88,7 @@ assign [class="firefox"] 20
 for_window [class="firefox" title=".*Calendar.*"] move to workspace 60
 for_window [class="firefox" title=".*ChatGPT.*"] move to workspace 22
 # the devbox switcher is its own tilix process with a distinct class, so it
-# is neither assigned to workspace 10 above nor tiled
+# is not tiled like regular terminals
 for_window [class="devbox_switcher"] floating enable, resize set 70 ppt 250 px, move position center
 
 # change focus
@@ -217,6 +216,8 @@ bindsym $mod+y exec --no-startup-id $scripts/i3_swap_current_workspace_order.sh
 
 # Jump to a running devbox (workspace "dev:<name>", see devbox_switcher.sh)
 bindsym $mod+o exec --no-startup-id $scripts/devbox_switcher.sh
+# Move the focused window to a running devbox / named workspace
+bindsym $mod+Ctrl+o exec --no-startup-id $scripts/devbox_switcher.sh --move
 
 # Go to previous workspace
 bindsym $mod+Tab exec --no-startup-id $scripts/i3_goto_prev_workspace.sh
