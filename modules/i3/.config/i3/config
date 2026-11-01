@@ -216,11 +216,9 @@ bindsym $mod+y exec --no-startup-id $scripts/i3_swap_current_workspace_order.sh
 
 # Jump to a running devbox (workspace "dev:<name>", see devbox_switcher.sh)
 bindsym $mod+o exec --no-startup-id $scripts/devbox_switcher.sh
-# Move the focused window to a running devbox / named workspace
-bindsym $mod+Ctrl+o exec --no-startup-id $scripts/devbox_switcher.sh --move
 # Mark the focused window as a (new or existing) named workspace, same as the
 # "Mark this window as named workspace" launcher entry
-bindsym $mod+Ctrl+Shift+o exec --no-startup-id $HOME/.local/bin/ws-mark --rofi
+bindsym $mod+Ctrl+o exec --no-startup-id $HOME/.local/bin/ws-mark --rofi
 
 # Go to previous workspace
 bindsym $mod+Tab exec --no-startup-id $scripts/i3_goto_prev_workspace.sh
