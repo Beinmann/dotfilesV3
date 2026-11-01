@@ -16,10 +16,6 @@
 # Bound to a hotkey: checks i3 and the list, then opens a small floating
 # tilix (see the devbox_switcher rule in the i3 config) running this script
 # again with --pick, which shows the fzf list and switches.
-#
-# With --move the same picker moves the focused window to the chosen workspace
-# instead of switching to it (the window is remembered before the picker opens,
-# since the picker itself takes focus).
 set -euo pipefail
 
 prefix="dev:"
@@ -69,24 +65,13 @@ picker_rows() {
 have_i3 || fail "i3 is not reachable (i3-msg -t get_version failed)."
 
 if [[ "${1:-}" == "--pick" ]]; then
-  # optional $2: i3 con_id of a window to move to the chosen workspace
   rows=$(picker_rows)
   [[ -n "$rows" ]] || fail "No running devboxes or named workspaces."
-  row=$(fzf --reverse --no-info --prompt "${2:+move }devbox> " \
+  row=$(fzf --reverse --no-info --prompt 'devbox> ' \
     --delimiter '\t' --with-nth 2 <<< "$rows") || exit 0
-  target="${row%%$'\t'*}"
-  if [[ -n "${2:-}" ]]; then
-    exec i3-msg "[con_id=$2] move container to workspace \"$target\""
-  fi
-  exec "$switch" "$target"
+  exec "$switch" "${row%%$'\t'*}"
 fi
 
 [[ -n "$(running_workspaces)" ]] || fail "No running devboxes or named workspaces."
-pick_args="--pick"
-if [[ "${1:-}" == "--move" ]]; then
-  con_id=$(i3-msg -t get_tree | jq -r 'recurse(.nodes[], .floating_nodes[]) | select(.focused) | .id' | head -n1)
-  [[ -n "$con_id" ]] || fail "No focused window to move."
-  pick_args="--pick $con_id"
-fi
 exec tilix --new-process --class=devbox_switcher -t "devbox switcher" \
-  -e "$(printf '%q ' "$0")$pick_args"
+  -e "$(printf '%q --pick' "$0")"
