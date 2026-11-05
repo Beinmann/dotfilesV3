@@ -37,6 +37,11 @@ resp=$(curl -s --max-time 5 \
 
 [[ -z "$resp" ]] && { [[ -f "$CACHE" ]] && cat "$CACHE"; echo "[Timeout]"; exit 1; }
 
+if [[ "$(echo "$resp" | jq -r '.error.type // empty' 2>/dev/null)" == "authentication_error" ]]; then
+    echo "[Token expired: run 'claude /login']"
+    exit 1
+fi
+
 session=$(echo "$resp" | jq -r '.five_hour.utilization // empty' 2>/dev/null)
 weekly=$(echo "$resp"  | jq -r '.seven_day.utilization // empty'  2>/dev/null)
 resets_at=$(echo "$resp" | jq -r '.five_hour.resets_at // empty'  2>/dev/null)
