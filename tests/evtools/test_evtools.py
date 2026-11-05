@@ -316,7 +316,7 @@ Saved Everything dirs (3 dirs, 1 nested)
     def test_never_set_up_fails_with_hint(self):
         os.remove(saved_locations.list_file(self.home))
         for cmd in (["list"], ["list", "--paths"], ["pick"], ["goto", "--all", "x"],
-                    ["entries", "--all"], ["stats"], ["check"]):
+                    ["ls", "--all"], ["stats"], ["check"]):
             rc, out, err = self.run_cli(*cmd)
             self.assertEqual((rc, out), (1, ""), cmd)
             self.assertIn("no list of Everything dirs yet - run `everything scan` or "
@@ -333,7 +333,7 @@ Saved Everything dirs (3 dirs, 1 nested)
         with mock.patch.object(discovery, "find_everything_dirs",
                                side_effect=AssertionError("walked the disk")):
             for cmd in (["list"], ["pick", "archive"], ["goto", "--all", "2", "25"],
-                        ["entries", "--all"], ["stats"], ["check"], ["locations"]):
+                        ["ls", "--all"], ["stats"], ["check"], ["locations"]):
                 self.run_cli(*cmd)
 
     def test_shim_runs_from_repo(self):
@@ -937,7 +937,7 @@ class EntriesCommandTest(TreeTest):
 
     def test_table_from_inside_an_entry(self):
         self.cd(os.path.join(self.main, "250003-nry", "sub"))
-        rc, out, _ = self.run_cli("entries")
+        rc, out, _ = self.run_cli("ls")
         self.assertEqual(rc, 0)
         self.assertEqual(out, """\
 Entries of ~/Main/Everything (6 entries)
@@ -953,13 +953,13 @@ ENTRY       DESCRIPTION  TAGS
 
     def test_not_inside_an_everything_dir(self):
         self.cd(self.p("elsewhere"))
-        rc, out, err = self.run_cli("entries")
+        rc, out, err = self.run_cli("ls")
         self.assertEqual((rc, out), (1, ""))
-        self.assertEqual(err, "everything entries: not inside an Everything dir "
+        self.assertEqual(err, "everything ls: not inside an Everything dir "
                               "(cd into one, or use --all)\n")
 
     def test_size_sorts_largest_first(self):
-        rc, out, _ = self.run_cli("entries", "--size")
+        rc, out, _ = self.run_cli("ls", "--size")
         self.assertEqual(rc, 0)
         lines = out.splitlines()
         link = os.lstat(os.path.join(self.main, "260002-lnk")).st_size
@@ -971,7 +971,7 @@ ENTRY       DESCRIPTION  TAGS
 
     def test_all_from_anywhere(self):
         self.cd(self.p("elsewhere"))
-        rc, out, _ = self.run_cli("entries", "--all")
+        rc, out, _ = self.run_cli("ls", "--all")
         self.assertEqual(rc, 0)
         self.assertEqual(out, """\
 Entries of every saved Everything dir (7 entries in 3 dirs)
@@ -988,7 +988,7 @@ ENTRY       DESCRIPTION  TAGS    EVERYTHING DIR
 
     def test_empty_dir(self):
         self.cd(self.p("Archive", "old_everything"))
-        rc, out, _ = self.run_cli("entries")
+        rc, out, _ = self.run_cli("ls")
         self.assertEqual((rc, out), (0, "Entries of ~/Archive/old_everything (0 entries)\n"))
 
     def test_read_only(self):
@@ -996,14 +996,14 @@ ENTRY       DESCRIPTION  TAGS    EVERYTHING DIR
             return sorted(os.path.join(d, n) for d, dn, fn in os.walk(self.home) for n in dn + fn)
         before = snapshot()
         with contextlib.redirect_stdout(io.StringIO()):
-            cli.main(["entries", "--size"])
-            cli.main(["entries", "--all", "--size"])
+            cli.main(["ls", "--size"])
+            cli.main(["ls", "--all", "--size"])
         self.assertEqual(snapshot(), before)
 
-    def test_lse_alias(self):
+    def test_lse_alias_removed(self):
         alias = os.path.join(REPO, "modules", "base", ".config", "dotfiles", "aliases.d", "base.sh")
         with open(alias) as f:
-            self.assertIn("alias lse='everything entries'", f.read())
+            self.assertNotIn("alias lse=", f.read())
 
 
 class NewCommandTest(TreeTest):
@@ -1505,7 +1505,7 @@ class SavedLocationsTest(TreeTest):
 
     def test_missing_dir_warning_on_all_commands(self):
         self.save(self.p("gone"), self.p("Main", "Everything"))
-        for cmd in (["list"], ["pick"], ["entries", "--all"], ["stats"], ["check"],
+        for cmd in (["list"], ["pick"], ["ls", "--all"], ["stats"], ["check"],
                     ["goto", "--all", "2", "25"]):
             _, _, err = ListCommandTest.run_cli(self, *cmd)
             self.assertIn("everything %s: warning: saved dir ~/gone no longer exists, skipping\n"
@@ -1529,14 +1529,14 @@ class EnclosingDirTest(TreeTest):
         self.assertEqual(discovery.enclosing_everything_dir(inner, [outer]), outer)
         self.assertEqual(discovery.enclosing_everything_dir(inner, [outer, inner]), inner)
 
-    def test_lse_in_a_marked_dir(self):
+    def test_ls_in_a_marked_dir(self):
         d = self.p("Work", "notes")
         os.makedirs(os.path.join(d, "260001-x"))
         os.chdir(d)
         self.addCleanup(os.chdir, "/")
-        self.assertEqual(ListCommandTest.run_cli(self, "entries")[0], 1)
+        self.assertEqual(ListCommandTest.run_cli(self, "ls")[0], 1)
         saved_locations.add(d)
-        rc, out, _ = ListCommandTest.run_cli(self, "entries")
+        rc, out, _ = ListCommandTest.run_cli(self, "ls")
         self.assertEqual(rc, 0)
         self.assertIn("260001-x", out)
 
@@ -2455,7 +2455,7 @@ class HelpCommandTest(unittest.TestCase):
     def test_every_shell_wrapper_listed(self):
         wrappers = everything_wrappers()
         # guards the parser above: these must be found, or the check is toothless
-        self.assertLessEqual({"ge", "gel", "cde", "lse", "everything"}, wrappers)
+        self.assertLessEqual({"ge", "gel", "cde", "everything"}, wrappers)
         self.assertEqual(sorted(self.overview_names(1)), sorted(wrappers))
 
 
@@ -2498,7 +2498,7 @@ class LinkOnlyDirsTest(TreeTest):
         self.assertEqual((rc, out), (0, self.p("Main", "Everything", "250002-nry") + "\n"))
 
     def test_entries_all(self):
-        rc, out, _ = self.run_cli("entries", "--all")
+        rc, out, _ = self.run_cli("ls", "--all")
         self.assertEqual(rc, 0)
         self.assertIn("(8 entries in 3 dirs)", out)
         self.assertEqual(out.count("260050-ext"), 1)
@@ -2516,7 +2516,7 @@ class LinkOnlyDirsTest(TreeTest):
         ])
 
     def test_help_documents_the_saved_list(self):
-        for cmd in ["goto", "entries", "stats", "check", "pick"]:
+        for cmd in ["goto", "ls", "stats", "check", "pick"]:
             out = io.StringIO()
             with contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
                 cli.main([cmd, "--help"])

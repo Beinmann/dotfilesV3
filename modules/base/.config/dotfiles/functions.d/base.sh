@@ -336,8 +336,8 @@ cde() {
     fi
 }
 
-# lse (list the entries of the Everything dir you're in) is `everything
-# entries`, aliased in aliases.d/base.sh; see ~/.local/bin/everything.
+# To list the entries of the Everything dir you're in, use `e ls`
+# (`everything ls`); see ~/.local/bin/everything.
 
 
 ################## Cut copy and paste functions ########

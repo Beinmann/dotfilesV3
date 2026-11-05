@@ -233,7 +233,7 @@ def _human_size(n: int) -> str:
 
 def cmd_entries(args: argparse.Namespace) -> int:
     """List the entries of the Everything dir you're in (or of all of them)."""
-    prog = "everything entries"
+    prog = "everything ls"
     home = os.path.expanduser("~")
     if args.all:
         dirs = _saved_dirs(prog)
@@ -749,8 +749,8 @@ OVERVIEW = [
     ("`everything` subcommands (everything <command> --help for details)", [
         ("list", "list every Everything dir with entry count, newest entry, suffixes",
          "everything list --paths"),
-        ("entries", "list the entries of the Everything dir you're in (-a: all dirs)",
-         "everything entries --size"),
+        ("ls", "list the entries of the Everything dir you're in (-a: all dirs)",
+         "everything ls --size"),
         ("pick", "print one Everything dir, via text match or fzf",
          "everything pick archive"),
         ("goto", "print one entry dir, by id or sidecar text",
@@ -780,8 +780,7 @@ OVERVIEW = [
          "ge 1 25   ge fire   ge -a fire"),
         ("gel", "like ge, but searches the current dir", "gel fire"),
         ("cde", "cd to one Everything dir, via text match or fzf", "cde archive"),
-        ("lse", "alias for `everything entries`", "lse -a"),
-        ("e", "alias for `everything` (not the \"e\" bashmark)", "e list   e new \"some idea\""),
+        ("e", "alias for `everything` (not the \"e\" bashmark)", "e ls   e list   e new \"some idea\""),
         ("everything", "the command itself; `everything new` also cds into the new entry and "
          "`everything remove` to the parent dir", "everything new \"some idea\" ai"),
     ]),
@@ -829,8 +828,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="print bare paths only, one per line (for scripting)")
     p.set_defaults(func=cmd_list)
 
-    p = sub.add_parser("entries", help="list the entries of the Everything dir you're in "
-                       "(alias: lse)",
+    p = sub.add_parser("ls", help="list the entries of the Everything dir you're in",
                        description="List the \"<yy><seq>[-suffix]\" entry dirs of the "
                        "Everything dir you're in (the current dir or its nearest ancestor "
                        "whose name contains \"everything\", any case) with the description "
@@ -980,7 +978,7 @@ def build_parser() -> argparse.ArgumentParser:
                        "(no \"everything\" in its name and no <yy><seq>[-suffix] entries) "
                        "is only added after confirming; without a terminal that is refused "
                        "unless --yes. A marked dir counts as an Everything dir (also for "
-                       "`lse`); nested dirs need their own mark.")
+                       "`ls`); nested dirs need their own mark.")
     p.add_argument("dir", nargs="?", help="the dir to mark (default: current dir)")
     p.add_argument("--yes", action="store_true",
                    help="don't ask about a dir that doesn't look Everything-like")
