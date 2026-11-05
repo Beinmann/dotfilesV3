@@ -28,9 +28,8 @@ interval=5
 # Crossed-out mic, only visible while the default microphone is muted.
 [mic]
 command=$HOME/.config/i3/scripts/mic_status.sh
-markup=pango
+format=json
 interval=persist
-color=#FB4934
 
 [volume]
 command=$HOME/.config/i3/scripts/volume_status.sh
