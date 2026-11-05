@@ -28,6 +28,14 @@ class WsMarkTest(unittest.TestCase):
         self.cwd = os.path.join(self.dir, "cwd")
         os.mkdir(self.cwd)
         self.set_workspaces([{"name": "10", "focused": True}])
+        # Stub of the shared switch script (it also records the previous
+        # workspace for $mod+Tab); ws-mark must call it with the target.
+        scripts = os.path.join(self.dir, ".config", "i3", "scripts")
+        os.makedirs(scripts)
+        stub = os.path.join(scripts, "i3_switch_workspace.sh")
+        with open(stub, "w") as f:
+            f.write(f'#!/bin/sh\necho "SWITCH $1" >> {self.log}\n')
+        os.chmod(stub, 0o755)
 
     def set_workspaces(self, workspaces, i3_up=True):
         data = os.path.join(self.dir, "ws.json")
@@ -158,6 +166,7 @@ class WsMarkTest(unittest.TestCase):
         code, out = self.run_script(answers="alpha\nMy box\n\n")
         self.assertEqual(code, 0, out)
         self.assertIn('move container to workspace "ws:alpha"', self.i3_calls())
+        self.assertIn("SWITCH ws:alpha", self.i3_calls())
         (name, path, title, _when, kind), = self.registry_lines()
         self.assertEqual((name, path, title, kind), ("alpha", "-", "My box", "manual"))
         self.assertEqual(os.listdir(self.cwd), [])

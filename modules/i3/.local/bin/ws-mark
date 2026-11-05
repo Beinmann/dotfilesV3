@@ -17,6 +17,8 @@
 # The focused window moves to ws:<name>; errors go to notify-send. Picking
 # an existing name keeps its registry line.
 #
+# It switches via i3_switch_workspace.sh, so $mod+Tab goes back to where you were.
+#
 # Also records the name in the registry named_workspaces.tsv next to the
 # devbox registry (columns: see ws-edit), with a fifth column "manual" and
 # path "-" unless, when it asks for name and title in a terminal, you let it
@@ -94,5 +96,8 @@ if [[ $known == 0 ]]; then
   mv "$tmp" "$registry"
 fi
 
-i3-msg "move container to workspace \"$ws\"; workspace \"$ws\"" >/dev/null
+# Move the window, then switch with the shared script, which also records the
+# workspace we came from for $mod+Tab (i3_goto_prev_workspace.sh).
+i3-msg "move container to workspace \"$ws\"" >/dev/null
+"$HOME/.config/i3/scripts/i3_switch_workspace.sh" "$ws" >/dev/null
 echo "Window is now $kind \"$name\" (workspace $ws)."
