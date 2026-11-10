@@ -154,6 +154,10 @@ def cmd_goto(args: argparse.Namespace) -> int:
             print(f"{prog}: not a dir: {args.dir}", file=sys.stderr)
             return 1
         bases = [args.dir]
+        # gel also looks into an "Everything" dir directly below the given one
+        below = os.path.join(args.dir, "Everything")
+        if os.path.isdir(below):
+            bases.append(below)
     else:
         bookmark = discovery.bookmark_dir()
         if bookmark is None:
@@ -778,7 +782,7 @@ OVERVIEW = [
     ("Shell functions and aliases (functions.d / aliases.d)", [
         ("ge", "cd to an entry of the \"e\" bashmark dir by id or text (-a: all dirs)",
          "ge 1 25   ge fire   ge -a fire"),
-        ("gel", "like ge, but searches the current dir", "gel fire"),
+        ("gel", "like ge, but searches the current dir (and an Everything dir below it)", "gel fire"),
         ("cde", "cd to one Everything dir, via text match or fzf", "cde archive"),
         ("e", "alias for `everything` (not the \"e\" bashmark)", "e ls   e list   e new \"some idea\""),
         ("everything", "the command itself; `everything new` also cds into the new entry and "

@@ -535,6 +535,10 @@ class GotoCommandTest(TreeTest):
         rc, _, err = self.run_cli("goto", "--dir", self.p("nope"), "x")
         self.assertEqual((rc, err), (1, f"everything goto: not a dir: {self.p('nope')}\n"))
 
+    def test_dir_option_also_searches_everything_dir_below(self):
+        rc, out, _ = self.run_cli("goto", "--dir", self.p("Main"), "1", "25")
+        self.assertEqual((rc, out), (0, self.p(self.main, "250001") + "\n"))
+
     def test_no_query(self):
         rc, out, _ = self.run_cli("goto")
         self.assertEqual((rc, out), (0, self.main + "\n"))
